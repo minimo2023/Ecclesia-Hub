@@ -1,5 +1,5 @@
 {
-  "version": "protected-terms-v3",
+  "version": "protected-terms-v4",
   "terms": [
     { "term": "耶和華", "category": "TITLE", "source": "CORE" },
     { "term": "耶穌基督", "category": "TITLE", "source": "CORE" },
@@ -12,6 +12,7 @@
     { "term": "神的兒子", "category": "TITLE", "source": "CORE" },
     { "term": "自己的名", "category": "PHRASE", "source": "CORE" },
     { "term": "死蔭的幽谷", "category": "PHRASE", "source": "CORE" },
+    { "term": "少年人", "category": "PHRASE", "source": "CORE" },
     { "term": "亞伯拉罕", "category": "PERSON", "source": "CORE" },
     { "term": "以撒", "category": "PERSON", "source": "CORE" },
     { "term": "雅各", "category": "PERSON", "source": "CORE" },

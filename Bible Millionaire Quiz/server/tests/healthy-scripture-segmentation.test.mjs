@@ -43,8 +43,8 @@ test('an editorial-note-only verse is a valid omitted game entry instead of an e
     assert.equal(result.healthState, 'VALID');
     assert.equal(result.confidence, 'HIGH');
     assert.deepEqual(result.fragments, []);
-    assert.equal(result.ruleVersion, 'healthy-rule-v12-semantic-relations-t8-m10');
-    assert.equal(result.lexiconVersion, 'protected-terms-v3');
+    assert.equal(result.ruleVersion, 'healthy-rule-v13-semantic-punctuation-t8-m10');
+    assert.equal(result.lexiconVersion, 'protected-terms-v4');
     assert.ok(result.issues.includes('EDITORIAL_NOTE_ONLY_VERSE'));
     assert.equal(validateHealthySegmentation({ text: '', fragments: [], boundaryOffsets: [] }).valid, true);
 });
@@ -104,6 +104,23 @@ test('a safe comma outranks the exact target in the Lords Prayer', () => {
     assert.ok(result.fragments.every(fragment => (
         Array.from(fragment).filter(character => /[\p{L}\p{N}\p{Script=Han}]/u.test(character)).length <= 10
     )));
+});
+
+test('enumerations stay grouped without crossing semantic commas or splitting a causative phrase', () => {
+    const source = '使人處事，領受智慧、仁義、公平、正直的訓誨，使愚人靈明，使少年人有知識和謀略。';
+    const result = segmentScriptureVerse(source);
+    assert.deepEqual(result.fragments, [
+        '使人處事，',
+        '領受智慧、仁義、',
+        '公平、正直的訓誨，',
+        '使愚人靈明，',
+        '使少年人有知識和謀略。'
+    ]);
+    assert.equal(result.fragments.join(''), source);
+    assert.equal(result.healthState, 'VALID');
+    assert.equal(result.confidence, 'HIGH');
+    assert.ok(result.fragments.every(fragment => !/使[\p{P}\p{S}]*$/u.test(fragment)));
+    assert.ok(result.fragments.every(fragment => !/^人有知識/u.test(fragment)));
 });
 
 test('an internal memory fragment never strands the possessive particle in Psalm 23', () => {
@@ -194,7 +211,7 @@ test('target length is adjustable but never creates arbitrary word cuts', () => 
     const source = '耶和華是我的牧者我必不致缺乏';
     const result = segmentScriptureVerse(source, { targetLength: 6 });
     assert.deepEqual(result.fragments, ['耶和華', '是我的牧者', '我必不致缺乏']);
-    assert.equal(result.ruleVersion, 'healthy-rule-v12-semantic-relations-t6-m10');
+    assert.equal(result.ruleVersion, 'healthy-rule-v13-semantic-punctuation-t6-m10');
     assert.equal(result.healthState, 'VALID');
 });
 
@@ -271,6 +288,18 @@ test('semantic validation rejects dangling function words at internal cuts', () 
         text: source,
         fragments: ['因為', '神愛世人。'],
         boundaryOffsets: [2, source.length]
+    });
+    assert.equal(validation.valid, false);
+    assert.ok(validation.errors.includes('INCOMPLETE_SEMANTIC_FRAGMENT'));
+});
+
+test('semantic validation rejects a dangling causative word at an internal cut', () => {
+    const source = '使愚人靈明，使少年人有知識和謀略。';
+    const cut = source.indexOf('少年人');
+    const validation = validateHealthySegmentation({
+        text: source,
+        fragments: [source.slice(0, cut), source.slice(cut)],
+        boundaryOffsets: [cut, source.length]
     });
     assert.equal(validation.valid, false);
     assert.ok(validation.errors.includes('INCOMPLETE_SEMANTIC_FRAGMENT'));

@@ -12,10 +12,10 @@ export const SCRIPTURE_SEGMENTATION_TARGET_LENGTH = configuredTargetLength();
 export const SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH = 10;
 export const SCRIPTURE_SEGMENTATION_MEMORY_PROFILE_VERSION = 'memory-segments-v1-t6-8-m10';
 export const SCRIPTURE_SEGMENTATION_RULE_VERSION =
-    'healthy-rule-v12-semantic-relations-t' + SCRIPTURE_SEGMENTATION_TARGET_LENGTH
+    'healthy-rule-v13-semantic-punctuation-t' + SCRIPTURE_SEGMENTATION_TARGET_LENGTH
     + '-m' + SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH;
 export const SCRIPTURE_SEGMENTATION_LEXICON_VERSION = String(
-    process.env.SCRIPTURE_SEGMENTATION_LEXICON_VERSION || 'protected-terms-v3'
+    process.env.SCRIPTURE_SEGMENTATION_LEXICON_VERSION || 'protected-terms-v4'
 ).trim();
 
 const coreLexicon = JSON.parse(readFileSync(
@@ -60,7 +60,17 @@ const SAFE_MEMORY_UNIT_STARTS = Object.freeze([
     '最尊大', '轄制', '就是', '所生', '其餘', '分定',
     '照以', '用刀', '用精金', '比眾', '引導'
 ]);
-const DANGLING_FRAGMENT_END = /(?:所以|因為|但是|然而|因此|於是|並且|若是|倘若|只是|不但|而且|或者)$/u;
+// A fragment must not stop after a word that grammatically governs what comes
+// next. This includes single-character coverbs/conjunctions such as "使":
+// otherwise an eight-character target can incorrectly produce
+// "...靈明使 | 少年人..." and still pass deterministic validation.
+const DANGLING_MULTI_CHARACTER_END = /(?:所以|因為|但是|然而|因此|於是|並且|若是|倘若|只是|不但|而且|或者)$/u;
+const DANGLING_SINGLE_CHARACTER_WORDS = new Set(Array.from(
+    // Keep this narrow: Intl can tokenize complete predicates such as "同在"
+    // as "同" + "在". Causative verbs are unambiguous here and must carry
+    // their following object/predicate into the same memory unit.
+    '使叫讓'
+));
 const DEPENDENT_FRAGMENT_START = /^的/u;
 const LITURGICAL_CONTINUATION = /^[（(]細拉[）)]/u;
 // Only these one-character segments are unambiguous standalone Chinese
@@ -69,6 +79,9 @@ const LITURGICAL_CONTINUATION = /^[（(]細拉[）)]/u;
 const SAFE_SINGLE_CHARACTER_WORDS = new Set(Array.from(
     '在的和並又也就都而與及或從向到將把被為所要必可使叫讓給因若但其他你我誰此那各每'
 ));
+const WORD_SEGMENTER = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter('zh-Hant', { granularity: 'word' })
+    : null;
 
 function sha256(value) {
     return createHash('sha256').update(String(value)).digest('hex');
@@ -79,7 +92,13 @@ function visibleOptionText(value) {
 }
 
 function hasIncompleteSemanticEnd(value) {
-    return DANGLING_FRAGMENT_END.test(visibleOptionText(value));
+    const text = visibleOptionText(value);
+    if (DANGLING_MULTI_CHARACTER_END.test(text)) return true;
+    if (!text || !WORD_SEGMENTER) return false;
+    const words = [...WORD_SEGMENTER.segment(text)]
+        .filter(item => item.isWordLike);
+    const finalWord = String(words.at(-1)?.segment || '');
+    return visibleLength(finalWord) === 1 && DANGLING_SINGLE_CHARACTER_WORDS.has(finalWord);
 }
 
 export function protectedCoreTerms() {
@@ -130,7 +149,7 @@ export function approvedMemorySegmentations() {
 }
 
 function segmentationRuleVersion(targetLength) {
-    return 'healthy-rule-v12-semantic-relations-t' + targetLength
+    return 'healthy-rule-v13-semantic-punctuation-t' + targetLength
         + '-m' + SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH;
 }
 
@@ -269,9 +288,8 @@ function findProtectedSpans(text, terms) {
 }
 
 function intlProtectedSpans(text) {
-    if (typeof Intl?.Segmenter !== 'function') return [];
-    const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'word' });
-    return [...segmenter.segment(text)]
+    if (!WORD_SEGMENTER) return [];
+    return [...WORD_SEGMENTER.segment(text)]
         .filter(item => item.isWordLike && visibleLength(item.segment) >= 2)
         .map(item => ({
             term: String(item.segment),
@@ -286,9 +304,8 @@ function protectedAtOffset(spans, offset) {
 }
 
 function segmenterCandidates(text, boundaries) {
-    if (typeof Intl?.Segmenter !== 'function') return;
-    const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'word' });
-    for (const item of segmenter.segment(text)) {
+    if (!WORD_SEGMENTER) return;
+    for (const item of WORD_SEGMENTER.segment(text)) {
         const segment = String(item.segment || '');
         const end = Number(item.index) + segment.length;
         const count = visibleLength(segment);
@@ -346,9 +363,19 @@ function candidateBoundaries(text, spans) {
         // memory-sized card. Keep its score materially above an ordinary word
         // boundary so the adjustable eight-character target cannot turn
         // "行在地上，" into "行在｜地上，" merely to save one character.
-        if (SENTENCE_END.has(character)) addBoundary(boundaries, boundaryEnd, 'SENTENCE', 112);
-        else if (CLAUSE_END.has(character)) addBoundary(boundaries, boundaryEnd, 'CLAUSE', 104);
-        else if (PHRASE_END.has(character)) addBoundary(boundaries, boundaryEnd, 'PHRASE', 96);
+        if (SENTENCE_END.has(character)) {
+            addBoundary(boundaries, boundaryEnd, 'SENTENCE', 112, { punctuation: character });
+        } else if (CLAUSE_END.has(character)) {
+            addBoundary(boundaries, boundaryEnd, 'CLAUSE', 104, { punctuation: character });
+        } else if (PHRASE_END.has(character)) {
+            // The enumeration comma is a possible grouping boundary, not a
+            // mandatory one. Keeping it distinct lets short list items merge
+            // into readable cards while ordinary commas retain clause shape.
+            const kind = character === '、' ? 'ENUMERATION' : 'PHRASE';
+            addBoundary(boundaries, boundaryEnd, kind, kind === 'ENUMERATION' ? 80 : 96, {
+                punctuation: character
+            });
+        }
     }
     segmenterCandidates(text, boundaries);
     semanticClauseCandidates(text, boundaries);
@@ -451,14 +478,29 @@ function chooseBoundaries(
     isolatedSpans = []
 ) {
     const points = [{ id: 'b0', offset: 0, kind: 'START', priority: 120 }, ...candidates];
-    const sentenceOffsets = points
-        .filter(point => point.kind === 'SENTENCE')
+    const semanticPunctuationOffsets = points
+        .filter(point => point.kind === 'SENTENCE'
+            || point.kind === 'PHRASE'
+            || (point.kind === 'CLAUSE' && /[；;]/u.test(point.punctuation || '')))
         .map(point => point.offset);
+    const semanticRangeEdges = [...new Set([0, ...semanticPunctuationOffsets, text.length])]
+        .sort((left, right) => left - right);
+    const shortSemanticRanges = semanticRangeEdges.slice(1).map((end, index) => ({
+        start: semanticRangeEdges[index],
+        end
+    })).filter(range => visibleLength(text.slice(range.start, range.end))
+        <= SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH);
     const best = new Array(points.length).fill(null);
     best[0] = { cost: 0, previous: -1 };
     for (let endIndex = 1; endIndex < points.length; endIndex += 1) {
         const end = points[endIndex];
         if (decisions[end.id] === 'FORBID' && end.offset !== text.length) continue;
+        // Once punctuation has already bounded a complete memory-sized unit,
+        // the adjustable target must not split it merely to move closer to
+        // eight characters (for example "使少年人 | 有知識...").
+        if (shortSemanticRanges.some(range => (
+            end.offset > range.start && end.offset < range.end
+        ))) continue;
         // Candidate generation has already removed boundaries that split a
         // protected term, leave dangling conjunctions, or start with dependent
         // particles. The remaining punctuation and word boundaries are safe
@@ -467,7 +509,13 @@ function chooseBoundaries(
         for (let startIndex = 0; startIndex < endIndex; startIndex += 1) {
             if (!best[startIndex]) continue;
             const start = points[startIndex];
-            if (sentenceOffsets.some(offset => offset > start.offset && offset < end.offset)) continue;
+            // A valid comma/semicolon/sentence boundary defines the clause
+            // before card length is considered. Enumeration commas remain
+            // soft so several short list items can share one card. Colons are
+            // also soft because they often introduce text that must follow.
+            if (semanticPunctuationOffsets.some(
+                offset => offset > start.offset && offset < end.offset
+            )) continue;
             const fragment = text.slice(start.offset, end.offset);
             let cost = best[startIndex].cost
                 + fragmentCost(fragment, end, targetLength, start.offset, isolatedSpans);
