@@ -1,0 +1,56 @@
+**/node_modules
+
+.git
+.claude
+.codex
+.agents
+.env
+.env.*
+*.log
+.DS_Store
+_backups
+_candidate-validation/
+_production-canonical/
+_recovery/
+舊檔/
+functions
+data/
+public/
+**/*.zip
+**/*.tar.gz
+**/*.sql
+**/*.exe
+content.db
+deploy.tar.gz
+surgical_patch.zip
+**/dist/
+**/dist-*/
+!Bible Millionaire Quiz/dist/
+!Bible Millionaire Quiz/dist/**
+!Bible Millionaire Quiz/mobile-app/dist/
+!Bible Millionaire Quiz/mobile-app/dist/**
+!Bible Millionaire Quiz/scripture-tools-app/dist/
+!Bible Millionaire Quiz/scripture-tools-app/dist/**
+private-media/
+**/.vite/
+node_modules/
+.dockerignore
+Dockerfile
+docker-compose.yml
+AGENT_SYNC.md
+AGENT_SYNC_REMOTE.md
+CHANGELOG.md
+README.md
+V2_README.md
+MAINTENANCE_GUIDE.md
+DEPLOYMENT_GUIDE.md
+backups/
+temp_deploy/
+tmp/
+scratch/
+Bible Millionaire Quiz/server/static_assets/
+Bible Millionaire Quiz/server/backups/
+Bible Millionaire Quiz/server/node_modules/
+steward-ops/XIT-Worker/.git/
+steward-ops/XIT-Worker/schedule.db*
+steward-ops/XIT-Worker/schedule-data.json

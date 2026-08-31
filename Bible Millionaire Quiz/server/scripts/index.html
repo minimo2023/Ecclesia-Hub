@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Sovereign Monitor V40.22</title>
+    <style>
+        body { background: #000; color: #00ff00; font-family: "Courier New", Courier, monospace; padding: 2rem; margin: 0; line-height: 1.5; }
+        .dashboard { border: 1px solid #00ff00; padding: 1.5rem; max-width: 600px; margin: 0 auto; box-shadow: 0 0 20px rgba(0, 255, 0, 0.2); }
+        .header { font-size: 1.2rem; font-weight: bold; border-bottom: 2px solid #00ff00; margin-bottom: 1rem; padding-bottom: 0.5rem; }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
+        .currency { font-size: 2rem; color: #fff; text-shadow: 0 0 10px #4ade80; }
+        .log-area { border-top: 1px dashed #00ff00; margin-top: 1rem; padding-top: 1rem; height: 150px; overflow-y: auto; font-size: 14px; }
+        .btn-run { background: #00ff00; color: #000; border: none; padding: 0.5rem 2rem; font-weight: bold; cursor: pointer; display: block; width: 100%; margin-top: 1rem; }
+        .btn-run:disabled { opacity: 0.3; cursor: not-allowed; }
+        .progress-bar { width: 100%; background: #222; height: 10px; margin-top: 1rem; }
+        #progress-fill { background: #00ff00; height: 100%; width: 0%; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">DB_DISTILLER_WATCHTOWER_V40_22</div>
+        <div class="stat-row">
+            <span>REAL-TIME COST:</span>
+            <span class="currency" id="cost">NT$ 0.00</span>
+        </div>
+        <div class="stat-row">
+            <span>TOTAL TOKENS:</span>
+            <span id="tokens">0</span>
+        </div>
+        <div class="stat-row" id="progress-info">
+            PROGRESS: 0 / 723
+        </div>
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <div class="log-area" id="log">[SYSTEM] READY_FOR_STREAMING...</div>
+        <button class="btn-run" id="run-btn" onclick="start()">[ RUN_DISTILLATION ]</button>
+    </div>
+
+    <script>
+        const es = new EventSource('/events');
+        const costEl = document.getElementById('cost');
+        const tokenEl = document.getElementById('tokens');
+        const progInfo = document.getElementById('progress-info');
+        const progFill = document.getElementById('progress-fill');
+        const log = document.getElementById('log');
+        const btn = document.getElementById('run-btn');
+
+        es.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.complete) {
+                log.innerHTML += '<br>>>> MISSION_COMPLETE_SUCCESSFULLY';
+                btn.disabled = false; return;
+            }
+            if (data.error) {
+                log.innerHTML += `<br>!!! ERROR: ${data.error}`; return;
+            }
+            costEl.innerText = `NT$ ${data.cost}`;
+            tokenEl.innerText = data.tokens;
+            progInfo.innerText = `PROGRESS: ${data.index} / ${data.total}`;
+            progFill.style.width = (data.index / data.total * 100) + '%';
+            log.innerHTML += `<br>> DISTILLED: [${data.name}]`;
+            log.scrollTop = log.scrollHeight;
+        };
+
+        async function start() {
+            btn.disabled = true;
+            log.innerHTML += '<br>> INITIALIZING_PIPELINE...';
+            await fetch('/start', { method: 'POST' });
+        }
+    </script>
+</body>
+</html>

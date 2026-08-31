@@ -1,0 +1,44 @@
+/* Game Selector Styles */
+.game-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 30px;
+    width: 200px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+
+.game-card:hover {
+    transform: translateY(-10px);
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #ffd700;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+}
+
+.game-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+}
+
+.game-card h2 {
+    margin: 10px 0 5px;
+    font-size: 1.5em;
+    color: #fff;
+}
+
+.game-card p {
+    color: #aaa;
+    font-size: 0.9em;
+    margin: 0;
+}
+
+.reversi-icon {
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.chess-icon {
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}

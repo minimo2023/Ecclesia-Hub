@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>題庫治理中心預覽</title>
+  <link rel="stylesheet" href="/public/question-bank-admin.css">
+  <style>
+    html,body{margin:0;min-height:100%;background:#07111f;color:#eaf1ff;font-family:Inter,"Noto Sans TC",sans-serif}
+    main>div{height:100vh;overflow:auto;position:relative}
+  </style>
+</head>
+<body>
+  <main><div class="overflow-auto"></div></main>
+  <script>
+    localStorage.setItem('adminToken','preview-token');
+    location.hash='/content';
+    const versions=[
+      {id:'CUV_TRAD',label:'和合本',verseCount:31103,bookCount:66,chapterCount:1189,ready:true},
+      {id:'LCC_TRAD',label:'呂振中譯本',verseCount:31103,bookCount:66,chapterCount:1189,ready:true},
+      {id:'CNV_TRAD',label:'新譯本',verseCount:31080,bookCount:66,chapterCount:1189,ready:false,reason:'有 2 節內容空白'},
+      {id:'TCV2019_TRAD',label:'現代中文譯本 2019',verseCount:31098,bookCount:66,chapterCount:1189,ready:true}
+    ];
+    const books=['創世記','出埃及記','利未記','民數記','申命記','約書亞記','士師記','路得記','撒母耳記上','撒母耳記下','列王紀上','列王紀下','歷代志上','歷代志下','以斯拉記','尼希米記','以斯帖記','約伯記','詩篇','箴言','傳道書','雅歌','以賽亞書','耶利米書','耶利米哀歌','以西結書','但以理書','何西阿書','約珥書','阿摩司書','俄巴底亞書','約拿書','彌迦書','那鴻書','哈巴谷書','西番雅書','哈該書','撒迦利亞書','瑪拉基書','馬太福音','馬可福音','路加福音','約翰福音','使徒行傳','羅馬書','哥林多前書','哥林多後書','加拉太書','以弗所書','腓立比書','歌羅西書','帖撒羅尼迦前書','帖撒羅尼迦後書','提摩太前書','提摩太後書','提多書','腓利門書','希伯來書','雅各書','彼得前書','彼得後書','約翰一書','約翰二書','約翰三書','猶大書','啟示錄'];
+    const rows=versions.flatMap((version,vi)=>books.map((book,i)=>{const playable=Math.max(0,21-((i+vi*3)%18));return {versionId:version.id,versionLabel:version.label,book,playable,target:15,shortage:Math.max(0,15-playable),stateCounts:{PUBLISHED:playable,IN_REVIEW:i%13===0?2:0,SUSPENDED:i%19===0?1:0},byDifficulty:{EASY:5,MEDIUM:7,HARD:2,VERY_HARD:1},corpusReady:version.ready};}));
+    const json=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+    window.fetch=async url=>{
+      const path=String(url);
+      if(path.includes('/metadata')) return json({success:true,versions});
+      if(path.includes('/corpus-status')) return json({success:true,versions});
+      if(path.includes('/overview')) return json({success:true,versions,corpus:versions,rows});
+      if(path.includes('/work-queue')) return json({success:true,items:[]});
+      if(path.includes('/questions?')) return json({success:true,questions:[],pagination:{page:1,limit:30,total:0,totalPages:1}});
+      if(path.includes('/policies/effective')) return json({success:true,policy:{milestones:[15,30,50,100],milestoneIncrement:50,batchLimit:12,difficultyRatios:{EASY:5,MEDIUM:7,HARD:2,VERY_HARD:1}}});
+      if(path.includes('/replenishment/status')) return json({success:true,service:{globalPlan:{targetCount:15},totalStoredThisSession:8},targeted:{state:'idle',message:'目前待命'}});
+      return json({success:true});
+    };
+  </script>
+  <script src="/public/question-bank-admin.js"></script>
+</body>
+</html>

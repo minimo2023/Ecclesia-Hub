@@ -1,0 +1,186 @@
+name: biblemillionairequiz
+
+services:
+
+  # ================================================================
+  # 🚪 nginx — 反向代理閘道（唯一對外入口，host:3000）
+  #    /xit-worker/* → xit-worker:3105
+  #    /*            → bible-quiz:3000
+  #    ⚠️ 不改 Cloudflare Tunnel 設定，仍指向 localhost:3000
+  # ================================================================
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: bible-quiz-nginx:${APP_IMAGE_TAG:-local}
+    container_name: bible-quiz-nginx
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - bible-quiz
+      - xit-worker
+
+  # ================================================================
+  # 📖 bible-quiz — 主網站（聖經智匯），不再直接對外暴露 3000
+  # ================================================================
+  bible-quiz:
+    build:
+      context: .
+      args:
+        - VITE_API_BASE_URL=
+        - VITE_SOCKET_URL=${VITE_SOCKET_URL}
+        - VITE_SOCKET_PORT=${VITE_SOCKET_PORT}
+    image: bible-quiz-app:${APP_IMAGE_TAG:-local}
+    container_name: bible-quiz
+    restart: unless-stopped
+    expose:
+      - "3000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./private-media:/app/private-media
+    environment:
+      - NODE_ENV=production
+      - GEMINI_PAID_KEYS=${GEMINI_PAID_KEYS}
+      - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
+      - GEMINI_MODELS=${GEMINI_MODELS}
+      - QUESTION_REPLENISHMENT_ENABLED=true
+      - SCRIPTURE_TOOLS_ENABLED=${SCRIPTURE_TOOLS_ENABLED:-true}
+      - SCRIPTURE_ORDER_ENABLED=${SCRIPTURE_ORDER_ENABLED:-false}
+      - SCRIPTURE_RAIN_ENABLED=${SCRIPTURE_RAIN_ENABLED:-false}
+      - SCRIPTURE_RECORDINGS_ENABLED=${SCRIPTURE_RECORDINGS_ENABLED:-false}
+      - SCRIPTURE_COMMUNITY_ENABLED=${SCRIPTURE_COMMUNITY_ENABLED:-false}
+      - ECCLESIA_PRIVATE_MEDIA_ROOT=/app/private-media
+      - DEVOTIONAL_AUTHOR_PROFILE_VERSION=${DEVOTIONAL_AUTHOR_PROFILE_VERSION:-v2}
+      - DEVOTIONAL_AUTHOR_V2_START_DATE=${DEVOTIONAL_AUTHOR_V2_START_DATE:-2026-08-16}
+      - ANSWER_TOKEN_SECRET=${ANSWER_TOKEN_SECRET:?ANSWER_TOKEN_SECRET is required}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      - PUBLIC_APP_URL=${PUBLIC_APP_URL:?PUBLIC_APP_URL is required}
+      - SMTP_HOST=${SMTP_HOST:?SMTP_HOST is required}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_SECURE=${SMTP_SECURE:-true}
+      - SMTP_USER=${SMTP_USER:?SMTP_USER is required}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:?SMTP_PASSWORD is required}
+      - SMTP_FROM=${SMTP_FROM:?SMTP_FROM is required}
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:?DB_USER is required}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - DB_NAME=${DB_NAME:?DB_NAME is required}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    links:
+      - postgres
+
+  # ================================================================
+  # 🗓️ xit-worker — 排班系統，獨立進程，與主站絕對隔離
+  #    - 共用 bible-quiz-app 映像（已內含所有 node_modules）
+  #    - 覆寫 CMD 只啟動排班 standalone server
+  #    - schedule.db 以 bind mount 保留在 host，部署後不被覆蓋
+  # ================================================================
+  xit-worker:
+    image: bible-quiz-app:${APP_IMAGE_TAG:-local}
+    container_name: bible-quiz-xit-worker
+    restart: unless-stopped
+    command: node steward-ops/XIT-Worker/backend/standalone-server.mjs
+    # XIT-Worker 目錄以 bind mount 掛載，schedule.db 資料持久保留在 host
+    # deploy_prod.js 的 DATA GUARD 機制亦會在部署時備份/還原此 DB
+    volumes:
+      - ./steward-ops/XIT-Worker:/app/steward-ops/XIT-Worker
+    environment:
+      - NODE_ENV=production
+      - XIT_WORKER_PORT=3105
+      - TZ=Asia/Taipei
+      # GEMINI_WORKER_KEY 由 XIT-Worker/.env 透過 dotenv 讀取，或由根目錄 .env 傳入
+      - GEMINI_WORKER_KEY=${GEMINI_WORKER_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3105/xit-worker/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      bible-quiz:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: bible-quiz-db
+    restart: unless-stopped
+    # 不對外暴露 5432，app 透過 compose service name "postgres" 連線
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: bible-quiz-ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+
+  tunnel:
+    # Docker Desktop on the production host cannot currently pull images through
+    # its credential helper. Reuse the already-deployed app image as a small
+    # launcher and download one pinned cloudflared binary instead of `latest`.
+    image: bible-quiz-app:${APP_IMAGE_TAG:-local}
+    container_name: bible-quiz-tunnel
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    # This service reuses the application image only as a launcher. Disable the
+    # image-level app healthcheck, which probes port 3000 inside cloudflared and
+    # incorrectly marks a connected tunnel as unhealthy.
+    healthcheck:
+      disable: true
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        curl -fsSL -o /tmp/cloudflared
+        https://github.com/cloudflare/cloudflared/releases/download/2026.8.2/cloudflared-linux-amd64
+        && chmod +x /tmp/cloudflared
+        && exec /tmp/cloudflared tunnel --no-autoupdate --protocol http2 run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      - TUNNEL_TRANSPORT_PROTOCOL=http2
+    depends_on:
+      nginx:
+        condition: service_started
+
+# NOTE: Cloudflare Tunnel 設定說明
+#   Cloudflare Dashboard Service URL：localhost:3000
+#   → 指向 nginx 容器（已取代原本的 bible-quiz:3000）
+#   → 不需要變更任何 Cloudflare 設定
+#
+# 生產部署後驗證清單：
+#   ✅ https://xtc-biblestudy.idv.tw/          → bible-quiz 主站
+#   ✅ https://xtc-biblestudy.idv.tw/xit-worker/ → 排班系統
+#   ✅ 兩容器互不影響，崩潰不連鎖
+
+volumes:
+  postgres_data:
+    name: biblemillionairequiz_postgres_data
+    external: true
+  # ollama_data:

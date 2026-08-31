@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-canvas: #f8fafc;
+  --app-surface: #ffffff;
+  --app-border: #e2e8f0;
+  --app-text: #0f172a;
+  --app-muted: #475569;
+  --app-accent: #4f46e5;
+}
+
+@font-face {
+  font-family: 'JFJinxuan';
+  src: url('/fonts/jf-jinxuan-3.1-book.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  html, body {
+    width: 100%;
+    height: 100%;
+    background-color: #F8FAFC; /* slate-50 */
+    color: #0F172A; /* slate-900 */
+    font-family: 'JFJinxuan', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  .app-page {
+    @apply min-h-0 flex-1 bg-slate-50 text-slate-900;
+  }
+
+  .app-topbar {
+    @apply h-14 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur-md;
+  }
+
+  .app-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .app-supporting {
+    @apply text-sm font-medium leading-relaxed text-slate-600;
+  }
+
+  .app-segmented {
+    @apply rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm;
+  }
+}
+
+@layer utilities {
+  .safe-area-pt { padding-top: env(safe-area-inset-top); }
+  .safe-area-pb { padding-bottom: max(env(safe-area-inset-bottom), 1rem); }
+  
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in-smooth {
+    animation: fadeInSmooth 0.8s ease-in-out forwards;
+  }
+
+  .animate-fade-out {
+    animation: fadeOut 1s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-pulse-green {
+    animation: pulseGreen 0.8s infinite;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInSmooth {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulseGreen {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.8); }
+  50% { box-shadow: 0 0 25px 8px rgba(34, 197, 94, 0.6); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}

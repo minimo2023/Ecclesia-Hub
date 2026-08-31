@@ -1,0 +1,98 @@
+.scripture-memory-game-hud {
+    position: relative;
+    z-index: 24;
+    display: grid;
+    grid-template-columns: minmax(92px, 0.85fr) repeat(5, minmax(70px, 1fr));
+    min-height: 66px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(15, 23, 42, 0.94);
+    padding: max(9px, env(safe-area-inset-top)) clamp(10px, 2vw, 22px) 9px;
+    color: #f8fafc;
+    text-align: center;
+    backdrop-filter: blur(16px);
+}
+
+.scripture-memory-game-hud__leave {
+    display: inline-flex;
+    width: fit-content;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0 13px;
+    color: #e0f2fe;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.scripture-memory-game-hud__leave:hover { background: rgba(255, 255, 255, 0.17); }
+.scripture-memory-game-hud__leave > svg { width: 16px; height: 16px; }
+
+.scripture-memory-game-hud__metric {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.scripture-memory-game-hud__metric small,
+.scripture-memory-game-hud .scripture-memory-coin-balance small {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.scripture-memory-game-hud__metric strong {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 3px;
+    color: #fff;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 950;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.scripture-memory-game-hud__metric strong.is-multiplier { color: #fcd34d; }
+.scripture-memory-game-hud__metric.is-time strong { color: #bae6fd; }
+.scripture-memory-game-hud__metric.is-time svg { width: 16px; height: 16px; }
+.scripture-memory-game-hud__metric.is-lives > span { display: flex; justify-content: center; gap: 2px; margin-top: 3px; color: #fb7185; }
+.scripture-memory-game-hud__metric.is-lives svg { width: 20px; height: 20px; opacity: 0.2; }
+.scripture-memory-game-hud__metric.is-lives svg.is-active { fill: currentColor; opacity: 1; }
+.scripture-memory-game-hud > .scripture-memory-coin-balance { align-self: stretch; }
+
+@media (max-width: 640px) {
+    .scripture-memory-game-hud {
+        grid-template-columns: 48px repeat(5, minmax(0, 1fr));
+        min-height: 58px;
+        gap: 2px;
+        padding: max(7px, env(safe-area-inset-top)) 5px 7px;
+    }
+    .scripture-memory-game-hud__leave { width: 40px; min-height: 40px; padding: 0; }
+    .scripture-memory-game-hud__leave span { display: none; }
+    .scripture-memory-game-hud__metric small,
+    .scripture-memory-game-hud .scripture-memory-coin-balance small { font-size: clamp(8px, 2.4vw, 10px); }
+    .scripture-memory-game-hud__metric strong { gap: 2px; font-size: clamp(13px, 4vw, 17px); }
+    .scripture-memory-game-hud__metric.is-lives > span { gap: 0; }
+    .scripture-memory-game-hud__metric.is-lives svg { width: clamp(15px, 4.6vw, 19px); height: clamp(15px, 4.6vw, 19px); }
+    .scripture-memory-game-hud__metric.is-time svg { display: none; }
+}
+
+@media (max-width: 360px) {
+    .scripture-memory-game-hud { grid-template-columns: 42px repeat(5, minmax(0, 1fr)); padding-inline: 3px; }
+    .scripture-memory-game-hud__leave { width: 36px; min-height: 36px; }
+    .scripture-memory-game-hud__metric strong { font-size: 13px; }
+    .scripture-memory-game-hud__metric.is-lives svg { width: 15px; height: 15px; }
+}

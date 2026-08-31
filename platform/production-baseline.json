@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "canonicalEnvironment": "production",
+  "capturedAt": "2026-08-25T17:07:00+08:00",
+  "captureHost": "WEIEN-WEBS",
+  "sourceRollback": {
+    "file": "rollback_2026-08-25T08-03-27.zip",
+    "sha256": "e24b4e64cbb0c684b0388ce27b8e28db621dc6ab02c7559d5069eaf5a5da604f"
+  },
+  "desktop": {
+    "productionPath": "Bible Millionaire Quiz/server/public",
+    "entry": "assets/main-Cz-YL51l.js",
+    "fileCount": 241,
+    "bytes": 77056925,
+    "fullTreeSha256": "d183484c01df918d6f19e3a158b73443bcc01627c911c18edfbdcb755d2b4945",
+    "coreFileCount": 214,
+    "coreTreeSha256": "8196421078cd6c2455910332e8e9d80417ae6ff2567e44babac5520dfc297742",
+    "coreExclusions": [
+      "experts/**",
+      "fonts/**"
+    ]
+  },
+  "mobile": {
+    "productionPath": "Bible Millionaire Quiz/server/public-mobile",
+    "entry": "/m/assets/index-CFL-FuK_.js",
+    "fileCount": 88,
+    "bytes": 1984029,
+    "fullTreeSha256": "15237188dd604f4ea3ea8119b495b0538aa44c67a28960efe870241b1077a9de",
+    "coreFileCount": 88,
+    "coreTreeSha256": "458a2583544effe38db84dedbadf5bb7d148e853d118c6a8a8b09b0250bff800",
+    "coreExclusions": []
+  },
+  "backend": {
+    "entry": "Bible Millionaire Quiz/server/index.js",
+    "referencePath": "platform/production-reference/server-index-20260825.js",
+    "sha256": "f54256fc198d32d33e24a0332b31116a48c79e3984793721a0ac2851522f1ad5",
+    "deliveryPolicy": "server/public and server/public-mobile"
+  },
+  "runtime": {
+    "appImageId": "sha256:4263c132843a0ea104dd01e7ee792b0dc29d127717f7310c1b3e0757e8d857de",
+    "nginxImageId": "sha256:edb706b7bc7db131a861db7739c5d97bbca6507baf70405b3aed83bb7ad930e9",
+    "databaseVolume": "biblemillionairequiz_postgres_data",
+    "codeTargets": [
+      "package-lock.json",
+      "Dockerfile",
+      "Dockerfile.nginx",
+      "docker-compose.yml",
+      "nginx.conf",
+      ".dockerignore",
+      "Bible Millionaire Quiz/server",
+      "Bible Millionaire Quiz/dist",
+      "Bible Millionaire Quiz/mobile-app/dist",
+      "Bible Millionaire Quiz/src/data"
+    ],
+    "codeExclusions": [
+      "Bible Millionaire Quiz/server/tests/**"
+    ],
+    "codeFileCount": 996,
+    "codeTreeSha256": "f54577f2b7d4a06cf1bb8d0e3591944f3182daa127378a86760cbedb6f9ea8ce"
+  },
+  "developmentObservation": {
+    "reconciledAt": "2026-08-25T18:40:00+08:00",
+    "desktopSourceFiles": 225,
+    "mobileSourceFiles": 31,
+    "desktopBuildEntry": "assets/main-Bfy42sXt.js",
+    "mobileBuildEntry": "/m/assets/index-3wo0Swks.js",
+    "serverIndexSha256": "f54256fc198d32d33e24a0332b31116a48c79e3984793721a0ac2851522f1ad5",
+    "editableSourceProvenance": "production_reconciled_maintainable_baseline"
+  },
+  "policy": {
+    "productionIsCanonical": true,
+    "developmentMustReconcileToProduction": true,
+    "compiledSnapshotsAreReferenceOnly": true,
+    "directDevelopmentFrontendDeploymentAllowed": true,
+    "rebuildAndVerificationRequiredBeforeDeployment": true,
+    "databaseRollbackAllowedByThisBaseline": false,
+    "requiredDeploymentApproval": "PRODUCTION_BASELINE_2026-08-25"
+  }
+}

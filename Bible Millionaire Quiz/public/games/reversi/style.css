@@ -1,0 +1,765 @@
+:root {
+    --board-bg: #2e7d32;
+    --board-border: #1b5e20;
+    --cell-border: #1b5e20;
+    --primary-color: #333;
+    --text-color: #f0f0f0;
+    --bg-color: #222;
+    --panel-bg: #333;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.app-container {
+    width: 100%;
+    /* max-width removed to allow full spacing */
+    height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+    /* Let clicks pass through to 3D if needed, but UI needs events */
+}
+
+/* Re-enable events for UI elements */
+header,
+.game-controls,
+.menu-screen {
+    pointer-events: auto;
+    z-index: 1000;
+    /* Ensure UI sits above any canvas/background (3D is z:1) */
+    position: relative;
+    /* REQUIRED for z-index to work */
+}
+
+/* Force interactivity for buttons and inputs */
+button,
+select,
+input,
+.menu-btn,
+.game-card,
+.size-btn,
+.diff-btn {
+    pointer-events: auto !important;
+    cursor: pointer;
+}
+
+/* HUD Layout Refactor */
+.game-controls {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    /* Push content to edges if needed, but we use absolute mostly */
+    background-color: transparent;
+    /* Remove panel bg */
+    backdrop-filter: none;
+    box-shadow: none;
+    pointer-events: none;
+    /* Let clicks pass through empty spaces */
+    z-index: 10;
+}
+
+/* Enable events ONLY on specific interactive UI elements */
+/* By default, everything in game-controls is pass-through */
+.game-controls * {
+    pointer-events: none;
+}
+
+/* Re-enable for buttons and text that needs interaction */
+.game-controls button,
+.game-controls select,
+.score-board,
+#statusMessage {
+    pointer-events: auto;
+    cursor: pointer;
+    /* Visual feedback */
+}
+
+/* Also ensure the game-screen itself handles layout but passes events */
+.game-screen {
+    width: 100%;
+    height: 100%;
+    /* Ensure full height */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+}
+
+/* Mode Select (Hidden mostly, but if shown, top left under header) */
+.mode-select {
+    position: absolute;
+    top: 10px;
+    left: 120px;
+    /* Next to back button */
+}
+
+/* Score Board - Split Left and Right */
+.score-board {
+    display: flex;
+    /* We will use absolute positioning for children, logic changed */
+    position: static;
+    /* Let children be absolute to game-controls */
+    width: 100%;
+    height: 0;
+    /* Don't take space */
+}
+
+/* Common Score Pill Style */
+.player-score {
+    position: absolute;
+    top: 100px;
+    /* Align with visual center or top? Let's go Top-Middle vertically centered */
+    /* top: 50%? No, top corners as requested "Left and Right" */
+    top: 60px;
+
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    padding: 15px 25px;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+    min-width: 140px;
+}
+
+#blackScoreWrapper {
+    left: 20px;
+    flex-direction: row;
+    /* Icon left */
+}
+
+#whiteScoreWrapper {
+    right: 20px;
+    flex-direction: row-reverse;
+    /* Icon right */
+}
+
+/* Active Turn Highlight */
+.player-score.active {
+    background: rgba(46, 125, 50, 0.8);
+    /* Green tint */
+    border-color: #4caf50;
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+}
+
+/* Status Message - Top Center to avoid blocking pieces */
+#statusMessage {
+    position: absolute;
+    top: 30px;
+    /* Moved from bottom: 80px */
+    left: 50%;
+    transform: translateX(-50%);
+
+    background: rgba(0, 0, 0, 0.6);
+    /* Slightly more transparent */
+    padding: 8px 25px;
+    /* Slightly smaller padding */
+    border-radius: 20px;
+    font-size: 1.3em;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 1px 3px black;
+    white-space: nowrap;
+
+    pointer-events: none;
+    /* Let clicks pass through just in case it overlaps standard top row */
+    z-index: 20;
+}
+
+/* Restart Button Container - Bottom Center below status */
+.game-controls>div:last-child {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+}
+
+/* Header - Top Left (Fixed) */
+header {
+    position: absolute;
+    top: 10px;
+    left: 20px;
+    z-index: 20;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    pointer-events: auto;
+}
+
+header h1 {
+    display: none;
+    /* Hide title in game to save space */
+}
+
+#backToMenuBtn {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+
+.disc {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    /* Pop effect */
+}
+
+/* Animation classes */
+.disc.pop-in {
+    animation: popIn 0.3s forwards;
+}
+
+@keyframes popIn {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    80% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Disc Container */
+.disc {
+    width: 85%;
+    height: 85%;
+    perspective: 600px;
+    /* Enable 3D perspective */
+    position: relative;
+    background: transparent;
+    /* Container is transparent */
+    box-shadow: none;
+    /* Shadow moved to faces */
+    border: none;
+}
+
+/* The flippable inner wrapper */
+.disc-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    /* Key for 3D children */
+    transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+    /* Authentic flip timing */
+}
+
+/* State: Black is 0deg, White is 180deg */
+.disc.is-black .disc-inner {
+    transform: rotateY(0deg);
+}
+
+.disc.is-white .disc-inner {
+    transform: rotateY(180deg);
+}
+
+/* Faces */
+.face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    backface-visibility: hidden;
+    /* Hide back when flipped */
+    /* Shared Shadow/Border */
+    box-shadow:
+        2px 2px 5px rgba(0, 0, 0, 0.5),
+        inset 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Front Face (Black) - 0deg */
+.face.front {
+    background: radial-gradient(circle at 30% 30%, #666 0%, #333 30%, #000 80%);
+    box-shadow:
+        2px 4px 6px rgba(0, 0, 0, 0.5),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.5),
+        inset 0 2px 4px rgba(255, 255, 255, 0.4);
+    transform: rotateY(0deg);
+}
+
+/* Back Face (White) - 180deg */
+.face.back {
+    background: radial-gradient(circle at 30% 30%, #fff 0%, #f0f0f0 40%, #ccc 100%);
+    box-shadow:
+        2px 4px 6px rgba(0, 0, 0, 0.4),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 0.8);
+    transform: rotateY(180deg);
+}
+
+/* Remove old class definitions if present to avoid conflicts */
+.disc.black,
+.disc.white {
+    display: none;
+    /* Deprecated classes */
+}
+
+
+#statusMessage {
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.2em;
+    min-height: 1.5em;
+}
+
+.board-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    position: relative;
+    /* For absolute overlay */
+}
+
+.board {
+    display: grid;
+    width: 90vmin;
+    max-width: 600px;
+    aspect-ratio: 1;
+
+    /* Background: Felt Texture */
+    background-color: #1e5631;
+    background-image: url('assets/board-felt.png');
+    /* Asset */
+    background-size: cover;
+    background-repeat: no-repeat;
+
+    /* Border: Wood Texture */
+    border: 15px solid #3e2723;
+    border-image-source: url('assets/board-frame.png');
+    /* Asset */
+    border-image-slice: 30;
+    /* Slice the texture for corners */
+    border-image-repeat: round;
+
+    border-radius: 4px;
+    /* Note: border-image might override radius in some browses, let's keep it simple for now or use a wrapper if needed. */
+    /* Fallback border if image fails or for radius support: actually border-image usually kills radius. */
+    /* Let's use a simpler approach: box-shadow for depth and background. */
+
+    box-shadow:
+        inset 0 0 20px rgba(0, 0, 0, 0.8),
+        /* Vignette on felt */
+        0 10px 30px rgba(0, 0, 0, 0.6);
+    /* Drop shadow */
+
+    padding: 10px;
+    gap: 2px;
+    margin: 0 auto;
+}
+
+/* Override the Wood texture bevels since we use an image now */
+.board {
+    border-top-color: transparent;
+    border-left-color: transparent;
+    border-bottom-color: transparent;
+    border-right-color: transparent;
+}
+
+/* Wood texture for border bevels */
+.board {
+    border-top-color: #5d4037;
+    /* Light wood */
+    border-left-color: #5d4037;
+    border-bottom-color: #281815;
+    /* Dark/Shadow wood */
+    border-right-color: #281815;
+}
+
+.cell {
+    background-color: var(--board-bg);
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Ensure cells fill the grid track */
+    width: 100%;
+    height: 100%;
+}
+
+/* Menu Screen Styles */
+.menu-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 80vh;
+    animation: fadeIn 0.5s;
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 350px;
+    /* Slightly wider for grid */
+}
+
+/* Size Selection Grid */
+.size-btn-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-right: 10px;
+}
+
+/* Coach HUD */
+.coach-hud {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20, 30, 40, 0.9);
+    border: 1px solid #00bcd4;
+    border-radius: 12px;
+    padding: 15px 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Center buttons */
+    gap: 15px;
+    box-shadow: 0 0 20px rgba(0, 188, 212, 0.3);
+    z-index: 100;
+    width: 60%;
+    max-width: 600px;
+    backdrop-filter: blur(10px);
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    /* Container is pass-through */
+}
+
+/* Enable clicks on buttons inside HUD */
+.coach-hud button,
+.coach-hud .small-btn {
+    pointer-events: auto;
+}
+
+.coach-avatar {
+    font-size: 2em;
+    filter: drop-shadow(0 0 5px #00bcd4);
+}
+
+.coach-text {
+    color: #e0f7fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 1.1em;
+    line-height: 1.4;
+    text-shadow: 0 1px 2px black;
+}
+
+/* Bad move warning style */
+.coach-hud.warning {
+    border-color: #ff5252;
+    box-shadow: 0 0 20px rgba(255, 82, 82, 0.3);
+}
+
+.coach-hud.warning .coach-text {
+    color: #ffebee;
+}
+
+/* Good move style */
+.coach-hud.good {
+    border-color: #ffd700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+.coach-hud.good .coach-text {
+    color: #fffde7;
+}
+
+.size-btn {
+    padding: 10px 5px;
+    background: #333;
+    border: 1px solid #bbb;
+    color: #888;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.disc.last-move-disc::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    background-color: #ff3d00;
+    /* Bright Orange/Red dot */
+    border-radius: 50%;
+    box-shadow: 0 0 4px #ff3d00;
+}
+
+.size-btn.unlocked {
+    background: #2e3a2e;
+    /* Base green tint */
+    color: #fff;
+    border-color: #4caf50;
+}
+
+.size-btn.selected {
+    background: #4caf50;
+    color: white;
+    font-weight: bold;
+    transform: scale(1.05);
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+}
+
+.size-btn.locked {
+    background: #222;
+    color: #444;
+    cursor: not-allowed;
+    border: 1px dashed #333;
+}
+
+.size-btn:hover:not(.locked):not(.selected) {
+    background: #388e3c;
+    color: white;
+}
+
+
+.menu-btn {
+    padding: 15px;
+    font-size: 1.2em;
+    cursor: pointer;
+    background-color: var(--board-bg);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    transition: transform 0.1s, background-color 0.2s;
+}
+
+/* Key Moments List */
+.key-moments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+
+.moment-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-left: 4px solid transparent;
+}
+
+.moment-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.moment-item.good {
+    border-left-color: #ffd700;
+}
+
+.moment-item.warning {
+    border-left-color: #ff5252;
+}
+
+.moment-item span {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.menu-btn:hover {
+    background-color: #388e3c;
+    transform: scale(1.02);
+}
+
+/* Key Moments List Styles (Re-attempt) */
+.key-moments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.moment-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-left: 4px solid transparent;
+    color: #eee;
+    font-size: 0.95em;
+    pointer-events: auto;
+    /* Ensure clickable */
+}
+
+.moment-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.moment-item.good {
+    border-left-color: #ffd700;
+}
+
+.moment-item.warning {
+    border-left-color: #ff5252;
+}
+
+.moment-item span {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.menu-btn.secondary {
+    background-color: #555;
+    font-size: 1em;
+}
+
+.small-btn {
+    padding: 5px 10px;
+    font-size: 0.8em;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid #666;
+    color: #ccc;
+    border-radius: 4px;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Waiting Overlay */
+.waiting-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    border-radius: 4px;
+    /* Match board border radius if any */
+}
+
+.waiting-content {
+    text-align: center;
+    color: white;
+}
+
+.spinner {
+    margin: 20px auto;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.cell {
+    position: relative;
+    background-color: transparent;
+    /* Let board felt show through */
+    /* Or give each cell a slight bevel to look like a socket? */
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+
+.cell:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    /* Subtle highlight */
+}
+
+/* Highlight valid moves with a subtle glowing marker instead of changing bg */
+.cell.valid-move {
+    /* No bg change */
+    background-color: transparent;
+}
+
+.cell.valid-move::after {
+    content: '';
+    width: 25%;
+    height: 25%;
+    border-radius: 50%;
+    background: rgba(0, 255, 0, 0.3);
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+    transition: all 0.2s;
+}
+
+.cell.valid-move:hover::after {
+    width: 35%;
+    height: 35%;
+    background: rgba(0, 255, 0, 0.6);
+}
+
+.disc {
+    width: 85%;
+    /* Relative to cell */
+    height: 85%;
+    border-radius: 50%;
+
+    /* 3D Coin Effect - Simplified for Image */
+    /* box-shadow handled in subclass */
+
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    /* Default placement */
+}
+
+/* Specific styling for dynamic grid sizes handled in JS */

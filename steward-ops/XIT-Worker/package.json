@@ -1,0 +1,10 @@
+{
+  "name": "church-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node backend/standalone-server.mjs",
+    "test": "npm run test:scheduling",
+    "test:scheduling": "node --test \"backend/tests/*.test.mjs\""
+  }
+}

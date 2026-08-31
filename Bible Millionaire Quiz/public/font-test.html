@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字體測試</title>
+    <style>
+        @font-face {
+            font-family: 'CuYuan';
+            src: url('/fonts/DFYuan-W7-WIN-BF-01.ttf') format('truetype');
+            font-weight: 700;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'CuYuan';
+            src: url('/fonts/DFYuan-W7-WINP-BF-02.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        body {
+            background: #1e293b;
+            color: white;
+            padding: 40px;
+            font-family: sans-serif;
+        }
+
+        .test-cuyuan {
+            font-family: 'CuYuan', sans-serif;
+            font-size: 48px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #334155;
+            border-radius: 8px;
+        }
+
+        .test-default {
+            font-family: sans-serif;
+            font-size: 48px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #475569;
+            border-radius: 8px;
+        }
+
+        .info {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>字體測試頁面</h1>
+
+    <h2>粗圓體（CuYuan）：</h2>
+    <div class="test-cuyuan">
+        聖經百萬問答 - 測試粗圓體字型
+    </div>
+    <div class="info">↑ 應該顯示為粗圓體</div>
+
+    <h2>預設字型（Sans-serif）：</h2>
+    <div class="test-default">
+        聖經百萬問答 - 測試預設字型
+    </div>
+    <div class="info">↑ 顯示為預設字型（對比用）</div>
+
+    <h2>字體載入狀態檢查：</h2>
+    <div id="font-status" style="padding: 20px; background: #334155; border-radius: 8px; margin-top: 20px;">
+        檢查中...
+    </div>
+
+    <script>
+        // Check if fonts are loaded
+        document.fonts.ready.then(function () {
+            const fontStatus = document.getElementById('font-status');
+            const loadedFonts = [];
+
+            document.fonts.forEach(font => {
+                if (font.family === 'CuYuan') {
+                    loadedFonts.push(`${font.family} (${font.weight})`);
+                }
+            });
+
+            if (loadedFonts.length > 0) {
+                fontStatus.innerHTML = `
+                    <div style="color: #22c55e; font-size: 18px; margin-bottom: 10px;">✅ 字體載入成功！</div>
+                    <div style="font-size: 14px;">已載入的粗圓體變體：</div>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        ${loadedFonts.map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                `;
+            } else {
+                fontStatus.innerHTML = `
+                    <div style="color: #ef4444; font-size: 18px; margin-bottom: 10px;">❌ 字體載入失敗！</div>
+                    <div style="font-size: 14px; color: #94a3b8;">
+                        請檢查：
+                        <ol style="margin: 10px 0; padding-left: 20px;">
+                            <li>字體檔案是否在 public/fonts/ 資料夾</li>
+                            <li>開啟開發者工具（F12）→ Network → 篩選 Font</li>
+                            <li>重新整理頁面，查看字體檔案是否有 404 錯誤</li>
+                        </ol>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+
+</html>

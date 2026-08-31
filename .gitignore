@@ -1,0 +1,65 @@
+# Private environment and credentials
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Installed dependencies and transient caches
+node_modules/
+**/node_modules/
+**/.vite/
+**/.vite-temp/
+
+# Generated application and mobile builds
+dist/
+dist-game/
+**/dist/
+**/dist-game/
+*.apk
+*.aab
+*.ipa
+
+# Runtime databases and sidecar files (may contain member or game data)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+steward-ops/XIT-Worker/schedule-data.json
+steward-ops/XIT-Worker/doc/
+
+# Local runtime output
+*.log
+*.pid
+*.tmp
+*.bak
+*.dump
+*.zip
+uploads/
+private-media/
+backups/
+deploy-staging/
+
+# Coverage, editor and operating-system state
+coverage/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Private keys and locally provisioned credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+service-account*.json
+Bible Millionaire Quiz/server/config/caramel-banner-*.json
+
+# Archived material is deliberately outside the active source tree
+舊檔/
+_candidate-validation/
+_production-canonical/
+_recovery/

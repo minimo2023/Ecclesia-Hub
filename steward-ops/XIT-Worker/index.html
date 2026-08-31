@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>西屯禮拜堂服事排班系統</title>
+  <link rel="stylesheet" href="styles.css?v=20260705_1" />
+</head>
+
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">台中基督徒西屯禮拜堂</p>
+      <h1>主日服事排班系統</h1>
+    </div>
+    <div class="header-actions">
+      <div class="account-control" aria-label="排班權限帳號">
+        <input id="accountInput" type="search" inputmode="text" autocomplete="off" placeholder="帳號" />
+        <button id="applyAccountBtn" type="button">套用</button>
+      </div>
+      <span id="syncStatus" class="sync-status">本機模式</span>
+      <button id="printBtn" type="button" title="列印">列印</button>
+      <button id="exportBtn" type="button" title="下載">下載</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel" id="sidePanel">
+      <section hidden>
+        <h2>目前頁籤設定</h2>
+
+        <div class="role-page active" id="mainRolePage">
+          <p class="hint">大堂欄位名稱格式：欄位名稱：人名、人名</p>
+          <textarea id="mainRolesInput" spellcheck="false"></textarea>
+          <div id="mainGroupWarnings" class="group-warnings" aria-live="polite"></div>
+        </div>
+
+        <div class="role-page" id="childrenRolePage">
+          <p class="hint">兒主欄位名稱格式：欄位名稱：人名、人名</p>
+          <textarea id="childrenRolesInput" spellcheck="false"></textarea>
+          <div id="childrenGroupWarnings" class="group-warnings" aria-live="polite"></div>
+        </div>
+
+        <div class="role-page" id="outputRolePage">
+          <p class="hint">合併輸出會顯示大堂與兒主的完整日期與欄位。</p>
+        </div>
+
+        <div class="role-page" id="peopleRolePage">
+          <p class="hint">服事人員頁籤請在右側管理同工資料。</p>
+        </div>
+      </section>
+
+      <section hidden>
+        <h2>當次臨時規則 (AI 解析)</h2>
+        <div id="temporaryRulesList" class="temporary-rules-list">
+          <p class="hint">暫無生效的臨時規則</p>
+        </div>
+        <!-- 舊版不可排日期 (隱藏以保證相容性) -->
+        <textarea id="unavailableInput" spellcheck="false" hidden></textarea>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div class="workspace-top">
+        <div class="tab-list top-tabs" role="tablist" aria-label="頁面切換">
+          <button class="tab-button active" type="button" data-role-page="main">大堂</button>
+          <button class="tab-button" type="button" data-role-page="children">兒主</button>
+          <button class="tab-button" type="button" data-role-page="output">合併輸出</button>
+          <button class="tab-button" type="button" data-role-page="rules">規則設定</button>
+          <button class="tab-button" type="button" data-role-page="people">服事人員設定</button>
+          <button class="tab-button" type="button" data-role-page="analytics">人數統計</button>
+        </div>
+
+        <!-- 新橫式時間配置列 -->
+        <div class="period-horizontal-config" id="periodHorizontalConfig">
+          <label>
+            年份
+            <select id="periodYear"></select>
+          </label>
+          <div id="mainPeriodControls" class="period-controls active">
+            <input id="mainHalf" type="hidden" value="1" />
+            <div class="period-group">
+              <span class="period-group-label">大堂半年</span>
+              <div class="period-button-grid period-button-grid-2">
+                <button type="button" class="period-choice" data-period-target="mainHalf" data-value="1">上半年</button>
+                <button type="button" class="period-choice" data-period-target="mainHalf" data-value="2">下半年</button>
+              </div>
+            </div>
+          </div>
+          <div id="childrenPeriodControls" class="period-controls">
+            <input id="childrenQuarter" type="hidden" value="1" />
+            <div class="period-group">
+              <span class="period-group-label">兒主季度</span>
+              <div class="period-button-grid period-button-grid-4">
+                <button type="button" class="period-choice" data-period-target="childrenQuarter"
+                  data-value="1">第1季</button>
+                <button type="button" class="period-choice" data-period-target="childrenQuarter"
+                  data-value="2">第2季</button>
+                <button type="button" class="period-choice" data-period-target="childrenQuarter"
+                  data-value="3">第3季</button>
+                <button type="button" class="period-choice" data-period-target="childrenQuarter"
+                  data-value="4">第4季</button>
+              </div>
+            </div>
+          </div>
+          <button id="applyPeriodBtn" type="button" class="primary">載入檔期</button>
+          <span id="periodStatusBadge" class="period-status-badge" hidden></span>
+          <button id="openFeedbackBtn" type="button" class="feedback-review-btn schedule-feedback-btn"
+            title="&#25552;&#20132;&#25490;&#29677;&#22238;&#39243;">&#128221; &#25490;&#29677;&#22238;&#39243;</button>
+            <div id="warnings" class="warnings" aria-live="polite"></div>
+          <div style="margin-left: auto; display: flex; align-items: center;">
+            <span id="periodHint" class="hint" style="margin-left: 0 !important;">依目前頁籤設定日期範圍</span>
+          </div>
+        </div>
+
+        <div class="toolbar sticky-toolbar">
+          <label>
+            表格標題
+            <input id="scheduleTitle" type="text" />
+          </label>
+          <div class="toolbar-actions" style="display: flex; gap: 8px; margin-left: auto;">
+            <button id="generateBtn" type="button" class="primary">開始排班</button>
+            <button id="auditBtn" type="button" class="audit-button" style="display: none;">稽核班表</button>
+            <button id="scheduleLogBtn" type="button" style="display: none;">程序紀錄</button>
+            <button id="clearBtn" type="button">清空排班</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="workspace-body">
+        <div id="schedulePage">
+<div class="table-shell">
+            <table id="scheduleTable" class="schedule-table" aria-label="教會排班表"></table>
+          </div>
+          <div id="childrenRosterContainer" style="display: none; margin-top: 2rem;"></div>
+
+          <div class="legend">
+            <span><i class="locked"></i>已鎖定</span>
+            <span><i class="conflict"></i>衝突</span>
+            <span><i class="duplicate"></i>重複排班</span>
+            <span><i class="note"></i>備註</span>
+          </div>
+        </div>
+
+        <div id="personnelPage" class="personnel-page">
+          <div class="toolbar">
+            <div>
+              <h2>服事人員設定</h2>
+              <p class="hint">管理同工資料與可服事項目。</p>
+            </div>
+            <span id="peopleCount" class="sync-status">0 位</span>
+          </div>
+
+          <div class="people-toolbar">
+            <div class="quick-filter-bar" id="peopleQuickFilters">
+              <button type="button" class="quick-filter active" data-filter="all">全部</button>
+              <button type="button" class="quick-filter" data-filter="speaker">講員</button>
+              <button type="button" class="quick-filter" data-filter="worship_leader">領會</button>
+              <button type="button" class="quick-filter" data-filter="pianist">司琴</button>
+              <button type="button" class="quick-filter" data-filter="vocalist">配唱</button>
+              <button type="button" class="quick-filter" data-filter="usher">招待</button>
+              <button type="button" class="quick-filter" data-filter="communion">餅杯</button>
+              <button type="button" class="quick-filter" data-filter="children">兒主</button>
+            </div>
+
+            <div class="people-actions-bar">
+              <button id="openPersonModalBtn" class="primary" type="button">新增同工</button>
+              <button id="personToolbarCancelBtn" type="button" hidden>取消編輯</button>
+            </div>
+          </div>
+
+          <div class="table-shell people-shell">
+            <table id="peopleTable" aria-label="服事人員清單"></table>
+          </div>
+        </div>
+
+        <div id="rulesPage" class="rules-page" hidden>
+          <div class="toolbar">
+            <div>
+              <h2>AI 智慧排班規則設定</h2>
+              <p class="hint">在這裡建立大堂與兒主的特殊排班限制，讓 AI 幫您自動校驗。</p>
+            </div>
+            <div class="toolbar-actions">
+              <span id="aiSpinner" class="spinner" style="display: none;"></span>
+              <button id="clearAiPromptBtn" type="button">清空全部規則</button>
+            </div>
+          </div>
+
+
+
+          <div class="rules-grid">
+            <div class="rules-column">
+              <div class="rules-column-header">
+                <h3>大堂規則</h3>
+                <div class="rules-column-actions">
+                  <button id="mainFeedbackReviewBtn" type="button" class="feedback-review-btn">
+                    確認回饋 <span class="bell-badge" data-feedback-count hidden>0</span>
+                  </button>
+                  <button id="addMainRuleBtn" type="button" class="primary">＋ 新增備忘</button>
+                </div>
+              </div>
+              <div id="mainRulesList" class="rules-list">
+                <!-- Cards will be injected here -->
+              </div>
+            </div>
+
+            <div class="rules-column">
+              <div class="rules-column-header">
+                <h3>兒主規則</h3>
+                <div class="rules-column-actions">
+                  <button id="addChildrenRuleBtn" type="button" class="primary">＋ 新增備忘</button>
+                </div>
+              </div>
+              <div id="childrenRulesList" class="rules-list">
+                <!-- Cards will be injected here -->
+              </div>
+            </div>
+          </div>
+          </div>
+        </div>
+
+        <div id="analyticsPage" class="analytics-page" hidden>
+          <div class="toolbar">
+            <div>
+              <h2>主日人數統計與趨勢</h2>
+              <p id="analyticsPeriodHint" class="hint">實體與線上聚會人數之長期紀錄與統計分析。</p>
+            </div>
+            <div class="toolbar-actions">
+              <button id="refreshAnalyticsBtn" type="button" class="primary">重新整理</button>
+            </div>
+          </div>
+          <div class="analytics-dashboard">
+            <div class="analytics-summary">
+              <div class="summary-card">
+                <h3>最近一季平均實體</h3>
+                <div class="summary-value" id="recentPhysicalAvg">--</div>
+              </div>
+              <div class="summary-card">
+                <h3>最近一季平均線上</h3>
+                <div class="summary-value" id="recentOnlineAvg">--</div>
+              </div>
+              <div class="summary-card">
+                <h3>最近一季平均總和</h3>
+                <div class="summary-value" id="recentTotalAvg">--</div>
+              </div>
+            </div>
+            <div class="analytics-chart-container">
+              <h3>人數趨勢圖</h3>
+              <div id="attendanceChart" class="attendance-chart">
+                <!-- 圖表將透過 JS 生成 -->
+              </div>
+            </div>
+            <div class="table-shell">
+              <table id="analyticsTable" class="schedule-table" aria-label="人數統計明細表">
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>實體人數</th>
+                    <th>線上人數</th>
+                    <th>總人數</th>
+                    <th>特殊節日/備註</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 紀錄將由 JS 生成 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <div id="scheduleProgressModal" class="modal-backdrop schedule-progress-modal" hidden>
+    <div class="modal-card schedule-progress-card" role="dialog" aria-modal="true"
+      aria-labelledby="scheduleProgressTitle">
+      <div class="modal-header">
+        <h2 id="scheduleProgressTitle">AI 大堂智慧排班</h2>
+      </div>
+      <div class="modal-body">
+        <div class="schedule-progress-heading">
+          <span class="schedule-progress-spinner" aria-hidden="true"></span>
+          <strong id="scheduleProgressStage">整理規則與人力</strong>
+        </div>
+        <p id="scheduleProgressMessage" class="hint" aria-live="polite">
+          請稍候，系統正在建立大堂排班。
+        </p>
+        <div class="schedule-progress-track" role="progressbar" aria-label="排班進度"
+          aria-valuemin="0" aria-valuemax="100" aria-valuenow="10">
+          <span id="scheduleProgressBar"></span>
+        </div>
+        <ol id="scheduleProgressDetails" class="schedule-progress-details"></ol>
+      </div>
+      <div class="modal-actions">
+        <button id="scheduleProgressCancelBtn" type="button">取消排班</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="scheduleRunLogModal" class="modal-backdrop" hidden>
+    <div class="modal-card schedule-run-log-card" role="dialog" aria-modal="true"
+      aria-labelledby="scheduleRunLogTitle">
+      <div class="modal-header">
+        <h2 id="scheduleRunLogTitle">排班程序紀錄</h2>
+      </div>
+      <div class="modal-body">
+        <p id="scheduleRunLogStatus" class="hint" aria-live="polite">
+          僅記錄階段、耗時與安全摘要，不保存 API 金鑰、完整 Prompt 或人員名單。
+        </p>
+        <div id="scheduleRunLogList" class="schedule-run-log-list"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="scheduleRunLogRefreshBtn" type="button">重新整理</button>
+        <button id="scheduleRunLogCloseBtn" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="auditModal" class="modal-backdrop audit-modal" hidden>
+    <div class="modal-card audit-modal-card" role="dialog" aria-modal="true"
+      aria-labelledby="auditModalTitle">
+      <div class="modal-header">
+        <h2 id="auditModalTitle">AI 班表公平性稽核</h2>
+      </div>
+      <div class="modal-body">
+        <p id="auditStatus" aria-live="polite"></p>
+        <ol id="auditSuggestions" class="audit-suggestions"></ol>
+        <p class="hint">AI 建議不會自動修改班表；每次套用前都會由後端重新驗證完整硬規則。</p>
+      </div>
+      <div class="modal-actions">
+        <button id="auditCloseBtn" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addRoleModal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="addRoleTitle">
+      <div class="modal-header">
+        <h2 id="addRoleTitle">新增欄位</h2>
+      </div>
+      <div class="modal-body">
+        <label id="addRoleCustomWrap">
+          欄位標題
+          <input id="addRoleCustomInput" type="text" autocomplete="off" placeholder="例如：課程內容、家長提醒、點心" />
+        </label>
+        <label>
+          插入位置
+          <select id="addRolePositionSelect">
+            <option value="beforeBigClass">中小後 / 大班前</option>
+            <option value="afterBigClass">大班後 / 備註前</option>
+          </select>
+        </label>
+        <p id="addRoleMessage" class="hint">這會新增兒主專用的非排班文字欄，原有排班欄位不會變動。</p>
+      </div>
+      <div class="modal-actions">
+        <button id="addRoleCancelBtn" type="button">取消新增欄位</button>
+        <button id="addRoleConfirmBtn" type="button" class="primary">確認新增</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ruleModal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ruleModalTitle">
+      <div class="modal-header">
+        <h2 id="ruleModalTitle">新增 AI 規則備忘</h2>
+      </div>
+      <div class="modal-body">
+        <form id="ruleForm" class="rule-form">
+          <input id="ruleId" type="hidden" />
+          <div class="form-group">
+            <label>套用區域</label>
+            <div class="radio-group" style="display: flex; gap: 16px;">
+              <label class="radio-label"><input type="radio" name="ruleScope" value="main"> 大堂</label>
+              <label class="radio-label"><input type="radio" name="ruleScope" value="children"> 兒主</label>
+              <label class="radio-label"><input type="radio" name="ruleScope" value="global"> 全域 (跨區或節日)</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="ruleText">備忘內容</label>
+            <textarea id="ruleText" placeholder="例如：復活節增加一次餅杯，或是如果李維當領會，恩沛必為大班" style="min-height: 80px;"></textarea>
+          </div>
+          <div class="form-group">
+            <label>影響職位 (可複選)</label>
+            <div id="ruleRolesMatrix" class="service-matrix" style="max-height: 150px; overflow-y: auto;">
+              <!-- Checkboxes injected here -->
+            </div>
+            <p class="hint">勾選此規則適用的特定職位，可幫助 AI 縮小判斷範圍。若是全域節日宣告可不勾選。</p>
+          </div>
+        </form>
+      </div>
+      <div class="modal-actions">
+        <button id="ruleModalCancelBtn" type="button">取消</button>
+        <button id="ruleModalConfirmBtn" type="button" class="primary">確認並讓 AI 分析</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="downloadModal" class="modal-backdrop" hidden>
+    <div class="modal-card history-modal-card" role="dialog" aria-modal="true" aria-labelledby="downloadModalTitle">
+      <div class="modal-header">
+        <h2 id="downloadModalTitle">下載格式</h2>
+      </div>
+      <div class="modal-body">
+        <p class="hint">請選擇目前頁面的輸出格式。</p>
+        <div class="history-actions">
+          <button id="downloadPdfBtn" type="button">PDF</button>
+          <button id="downloadJpgBtn" type="button">JPG</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="downloadCloseBtn" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="personModal" class="modal-backdrop" hidden>
+    <div class="modal-card person-modal-card" role="dialog" aria-modal="true" aria-labelledby="personModalTitle">
+      <div class="modal-header">
+        <h2 id="personModalTitle">新增同工</h2>
+      </div>
+      <div class="modal-body">
+        <form id="personForm" class="person-form">
+          <input id="personId" type="hidden" />
+          <div class="form-group person-name-group">
+            <label for="personName">姓名</label>
+            <input id="personName" type="text" autocomplete="off" />
+          </div>
+          <div class="form-group person-name-group">
+            <label for="personNickname">暱稱 (AI 分析用)</label>
+            <input id="personNickname" type="text" autocomplete="off" placeholder="例如：阿寶、小華（多個用逗號分隔）" />
+          </div>
+          <div class="form-group person-service-group">
+            <label>服事區域</label>
+            <div id="personServiceMatrix" class="service-matrix"></div>
+          </div>
+          <div class="form-group person-note-group">
+            <label for="personDetail">補充說明</label>
+            <input id="personDetail" type="text" placeholder="例如：可臨時支援、只排早堂..." />
+          </div>
+        </form>
+        <div id="personMessage" class="warnings" aria-live="polite"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="personCancelBtn" type="button">取消</button>
+        <button id="personSubmitBtn" type="submit" form="personForm" class="primary">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="feedbackReviewModal" class="modal-backdrop" hidden>
+    <div class="modal-card feedback-review-modal-card" role="dialog" aria-modal="true"
+      aria-labelledby="feedbackReviewTitle">
+      <div class="modal-header">
+        <h2 id="feedbackReviewTitle">確認排班回饋</h2>
+      </div>
+      <div class="modal-body">
+        <p class="hint">確認後會使用與「新增備忘」相同的 AI 解析流程，建立成可編輯、可移除的規則備忘。</p>
+        <div id="feedbackList" class="feedback-list">
+          <p class="hint" style="text-align:center; padding: 2rem;">目前沒有新通知</p>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="feedbackReviewCloseBtn" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 職位提示彈窗 -->
+  <div id="rolePromptModal" class="modal-backdrop" hidden>
+    <div class="modal-card role-prompt-modal-card" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>未偵測到明確職位</h3>
+      </div>
+      <div class="modal-body">
+        <p>系統沒有從您的留言中偵測到「講員、領會、司琴...」等職位關鍵字。</p>
+        <p>請勾選此回饋適用的職位 (可複選，或直接略過)：</p>
+        <div id="rolePromptOptions" style="display:flex; flex-wrap:wrap; gap:8px; margin: 16px 0;">
+          <!-- 動態生成選項 -->
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="rolePromptCloseBtn">取消送出</button>
+        <button type="button" id="rolePromptSkipBtn">略過並送出</button>
+        <button type="button" id="rolePromptConfirmBtn" class="primary">附加職位並送出</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-overlay" id="panelOverlay"></div>
+  <div class="feedback-panel" id="feedbackPanel">
+    <div class="panel-header">
+      <h2>提出排班回饋</h2>
+      <button class="close-btn" id="closeFeedbackBtn">&times;</button>
+    </div>
+    <div class="panel-content">
+      <div class="form-group" id="messageSection">
+        <label>請提供您的回饋內容</label>
+        <p class="hint">請填入您的姓名、服事及需要調整或可排訂的日期。</p>
+        <textarea id="feedbackMessage" rows="8" placeholder="例：我是同工姓名，司琴，8/9 請假，8/16 和 8/23 可以排"
+          style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px; resize: vertical;"></textarea>
+      </div>
+
+      <button id="submitFeedbackBtn" class="primary submit-btn" disabled>送出回饋</button>
+      <div id="submitStatus" style="display:none; margin-top:1rem; text-align:center; font-weight:bold;"></div>
+    </div>
+  </div>
+
+  <div id="historyRevertModal" class="modal-backdrop" hidden>
+    <div class="modal-card" style="max-width: 500px; position: relative;" role="dialog">
+      <div class="modal-header">
+        <h3 id="historyRevertModalTitle">歷史版本還原</h3>
+        <button type="button" id="historyRevertCloseBtn"
+          style="background:none; border:none; font-size:24px; cursor:pointer; padding:0; line-height:1; position:absolute; right:15px; top:15px;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 20px;">
+        <p>請選擇您要將排班表還原到哪一個時間點：</p>
+        <select id="historyRevertSelect"
+          style="width: 100%; padding: 8px; margin-bottom: 20px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;">
+          <option value="">載入中...</option>
+        </select>
+
+        <p><strong>請選擇還原範圍 (Smart Merge)</strong></p>
+        <p style="font-size: 13px; color: #666; margin-bottom: 15px;">為了避免覆蓋其他人的編輯，您可以選擇僅還原「大堂」或「兒主」的部分。</p>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button type="button" class="primary" id="revertMainOnlyBtn" style="background: #00796b;">還原大堂排班
+            (保留目前兒主)</button>
+          <button type="button" class="primary" id="revertChildrenOnlyBtn" style="background: #2e7d32;">還原兒主排班
+            (保留目前大堂)</button>
+          <button type="button" class="danger" id="revertAllBtn" style="background: #d32f2f;">整張表完全還原 (覆蓋所有資料)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=20260705_5"></script>
+</body>
+
+</html>

@@ -1,0 +1,402 @@
+#xiangqiApp {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Menu Screens */
+#xiangqiMenu,
+#xiangqiPvEMenu,
+#xiangqiLobbyScreen {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+#xiangqiMenu h1,
+#xiangqiPvEMenu h1,
+#xiangqiLobbyScreen h1 {
+    font-size: 2.5em;
+    color: #ffd700;
+    margin-bottom: 30px;
+    text-shadow: 0 2px 10px rgba(255, 215, 0, 0.3);
+}
+
+#xiangqiMenu .menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+    width: 100%;
+    max-width: 300px;
+}
+
+/* Difficulty Grid */
+.difficulty-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    max-width: 400px;
+}
+
+.diff-btn {
+    padding: 15px 25px;
+    border: 2px solid #4a7c59;
+    background: linear-gradient(145deg, #2a4a3a, #1a3a2a);
+    color: #9acd32;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.diff-btn:hover {
+    background: linear-gradient(145deg, #3a6a4a, #2a5a3a);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.diff-btn:active {
+    transform: translateY(0);
+}
+
+/* Game Screen */
+#xiangqiGameScreen {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    height: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+#xiangqiApp header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#xiangqiApp header .small-btn {
+    flex-shrink: 0;
+}
+
+#xiangqiApp header h1 {
+    font-size: 1.8em;
+    color: #ffd700;
+    margin: 0;
+    text-shadow: 0 2px 10px rgba(255, 215, 0, 0.3);
+    flex: 1;
+    text-align: center;
+}
+
+/* Game Controls */
+#xiangqiApp .game-controls {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+#xiangqiStatus {
+    color: #ffd700;
+    margin-bottom: 10px;
+    font-size: 1.8em;
+    font-weight: bold;
+    text-align: center;
+    z-index: 100;
+    position: relative;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Board centering container */
+#xiangqiApp .board-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* The Board - Premium wooden look */
+#xiangqiBoard {
+    position: relative;
+    width: min(85vmin, 630px);
+    height: calc(min(85vmin, 630px) * 10 / 9);
+    margin: 0 auto;
+    background: linear-gradient(145deg, #e8c18c 0%, #d4a66a 50%, #c4915a 100%);
+    border: 10px solid #5c4033;
+    border-radius: 6px;
+    box-shadow:
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.3),
+        0 16px 32px rgba(0, 0, 0, 0.4),
+        0 32px 64px rgba(0, 0, 0, 0.5);
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%, rgba(0, 0, 0, 0.1) 100%);
+}
+
+/* Chess pieces - Premium 3D-like with gradients */
+.xq-piece {
+    position: absolute;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: "KaiTi", "楷体", "STKaiti", serif;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    z-index: 20;
+    /* Ensure above click layer (z-index 10) */
+    transition: all 0.15s ease;
+
+    /* Premium 3D look - ivory base */
+    background: linear-gradient(135deg, #fff8e7 0%, #f5e6c8 30%, #e8d4a8 70%, #d4c094 100%);
+    border: 3px solid #8b7355;
+
+    /* Strong multi-layer shadow for floating 3D effect */
+    box-shadow:
+        0 2px 2px rgba(0, 0, 0, 0.3),
+        0 4px 4px rgba(0, 0, 0, 0.2),
+        0 6px 8px rgba(0, 0, 0, 0.15),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 20;
+}
+
+.xq-piece:hover {
+    transform: translateY(-4px) scale(1.08);
+    z-index: 25;
+    box-shadow:
+        0 4px 4px rgba(0, 0, 0, 0.3),
+        0 8px 8px rgba(0, 0, 0, 0.2),
+        0 12px 16px rgba(0, 0, 0, 0.15),
+        0 16px 24px rgba(0, 0, 0, 0.1),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Red pieces */
+.xq-piece.r {
+    color: #b22222;
+    border-color: #8b0000;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Black pieces */
+.xq-piece.b {
+    color: #1a1a1a;
+    border-color: #333;
+    text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.1);
+}
+
+/* Selected piece - golden glow */
+.xq-piece.selected {
+    background: linear-gradient(135deg, #fffacd 0%, #fff8dc 30%, #ffefd5 70%, #ffd700 100%);
+    transform: scale(1.15) translateY(-2px);
+    z-index: 30;
+    box-shadow:
+        0 0 15px 5px rgba(255, 215, 0, 0.6),
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 0.8);
+}
+
+/* Valid move hint - radial gradient like chess */
+.xq-hint {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 200, 0, 0.7) 0%, rgba(0, 150, 0, 0.5) 100%);
+    z-index: 15;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s;
+    pointer-events: auto;
+}
+
+.xq-hint:hover {
+    transform: scale(1.4);
+}
+
+/* King in check warning - pulsing red */
+.xq-piece.in-check {
+    animation: checkPulse 0.4s ease-in-out infinite alternate;
+}
+
+@keyframes checkPulse {
+    0% {
+        box-shadow:
+            0 2px 2px rgba(0, 0, 0, 0.3),
+            0 4px 4px rgba(0, 0, 0, 0.2),
+            0 0 15px 5px rgba(255, 0, 0, 0.4),
+            inset 0 2px 4px rgba(255, 255, 255, 0.5);
+    }
+
+    100% {
+        background: linear-gradient(135deg, #ffcccc 0%, #ff9999 30%, #ff6666 70%, #ff4444 100%);
+        box-shadow:
+            0 2px 2px rgba(0, 0, 0, 0.3),
+            0 4px 4px rgba(0, 0, 0, 0.2),
+            0 0 25px 10px rgba(255, 0, 0, 0.7),
+            inset 0 2px 4px rgba(255, 255, 255, 0.5);
+    }
+}
+
+/* AI move animation - blue glow while moving */
+.xq-piece.ai-moving {
+    z-index: 50 !important;
+    box-shadow:
+        0 0 20px 10px rgba(0, 150, 255, 0.8),
+        0 4px 8px rgba(0, 0, 0, 0.3) !important;
+
+    transform: scale(1.15) !important;
+}
+
+/* Captured Pieces Panel */
+.captured-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 60px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 10px;
+    border-radius: 8px;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 200px;
+    pointer-events: none;
+    /* Let clicks pass near panel */
+}
+
+.captured-piece {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    font-weight: bold;
+    font-family: "KaiTi", "楷体", "STKaiti", serif;
+    cursor: default;
+
+    /* Reversi Ivory Style match */
+    background: radial-gradient(circle at 30% 30%, #fffff0 0%, #f0e68c 40%, #c0b070 100%);
+    border: none;
+    box-shadow:
+        1px 2px 4px rgba(0, 0, 0, 0.4),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+        inset 0 2px 5px rgba(255, 255, 255, 0.9);
+}
+
+.captured-piece.r {
+    color: #c00000;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.captured-piece.b {
+    color: #1a1a1a;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Dark Chess 3D Flip */
+.xq-piece-container {
+    perspective: 1000px;
+    z-index: 20;
+    cursor: pointer;
+    position: absolute;
+}
+
+.xq-piece-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+    transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+    transform-style: preserve-3d;
+}
+
+/* Flip state */
+.xq-piece-container.flipped .xq-piece-inner {
+    transform: rotateY(180deg);
+}
+
+.xq-piece-front,
+.xq-piece-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
+    border: 2px solid;
+}
+
+/* Front Face (Text) - Polished Ivory Style (Reversi-like) */
+.xq-piece-front {
+    /* Ivory Gradient Base */
+    background: radial-gradient(circle at 30% 30%, #fffff0 0%, #f0e68c 40%, #c0b070 100%);
+    font-weight: bold;
+    font-family: "KaiTi", "楷体", "STKaiti", serif;
+    transform: rotateY(180deg);
+
+    /* Reversi-style Lighting/Bevel */
+    border: none;
+    /* No border, use shadow for edge */
+    box-shadow:
+        1px 2px 4px rgba(0, 0, 0, 0.4),
+        /* Drop shadow */
+        inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+        /* Bottom bevel */
+        inset 0 2px 5px rgba(255, 255, 255, 0.9);
+    /* Top highlight */
+}
+
+/* Back Face (Covered) - Polished Green Style (Reversi-like) */
+.xq-piece-back {
+    /* Green Gradient Base */
+    background: radial-gradient(circle at 30% 30%, #66bb6a 0%, #388e3c 40%, #1b5e20 100%);
+    border-color: transparent;
+    color: transparent;
+
+    /* Reversi-style Lighting/Bevel */
+    border: none;
+    box-shadow:
+        1px 2px 4px rgba(0, 0, 0, 0.4),
+        /* Drop shadow */
+        inset 0 -2px 5px rgba(0, 0, 0, 0.4),
+        /* Bottom bevel */
+        inset 0 2px 5px rgba(255, 255, 255, 0.5);
+    /* Top highlight */
+}
+
+.xq-piece-front.r {
+    color: #c00000;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+    /* Etched look */
+}
+
+.xq-piece-front.b {
+    color: #1a1a1a;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.xq-piece-container.selected .xq-piece-front {
+    box-shadow: 0 0 10px 3px rgba(0, 150, 255, 0.8) !important;
+}

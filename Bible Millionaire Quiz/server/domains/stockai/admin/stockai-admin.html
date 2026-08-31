@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockAI 授權管理後台</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .card { background: var(--card); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid var(--border); margin-bottom: 20px; }
+        h1, h2 { margin: 0; color: #0f172a; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 14px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: opacity 0.2s; }
+        button:hover { opacity: 0.9; }
+        button.secondary { background: #64748b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        th { background: #f1f5f9; font-weight: 600; }
+        .status-active { color: #16a34a; font-weight: 600; }
+        .admin-auth { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    </style>
+</head>
+<body>
+
+<div id="authPanel" class="admin-auth">
+    <div class="card" style="width: 350px;">
+        <h2>管理員登入</h2>
+        <p style="color: #64748b; font-size: 14px;">請輸入 StockAI Admin Key</p>
+        <div class="input-group">
+            <input type="password" id="adminKeyInput" placeholder="Enter ADMIN_KEY">
+        </div>
+        <button onclick="login()" style="width: 100%;">驗證並進入</button>
+    </div>
+</div>
+
+<div class="container" id="mainPanel" style="display: none;">
+    <header>
+        <h1>StockAI 授權管理</h1>
+        <div>
+            <button onclick="logout()" class="secondary">登出</button>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- 產碼工具 -->
+        <div class="card">
+            <h2>§ 序號屬性配置產碼</h2>
+            <div class="input-group">
+                <label>授權等級</label>
+                <select id="genTier">
+                    <option value="pro">專業版 (Pro)</option>
+                    <option value="lifetime">終身版 (Lifetime)</option>
+                    <option value="free">免費版 (Free)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>數量</label>
+                <input type="number" id="genCount" value="10">
+            </div>
+            <div class="input-group">
+                <label>最大綁定機器數</label>
+                <input type="number" id="genMaxDevices" value="1">
+            </div>
+            <button onclick="generateKeys()">批量產生並匯出 Excel</button>
+        </div>
+
+        <!-- 救援工具 -->
+        <div class="card">
+            <h2>§ 客服救援路徑</h2>
+            <label>輸入要救援的序號</label>
+            <div class="input-group">
+                <input type="text" id="rescueKey" placeholder="SKAI-XXXX-XXXX">
+            </div>
+            <button onclick="clearHWID()" class="secondary">清除所有機器綁定 (Reset HWID)</button>
+        </div>
+    </div>
+
+    <!-- 授權列表 -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>§ 全域授權狀態</h2>
+            <button onclick="loadLicenses()" class="secondary">重新整理</button>
+        </div>
+        <table id="licenseTable">
+            <thead>
+                <tr>
+                    <th>序號</th>
+                    <th>等級</th>
+                    <th>狀態</th>
+                    <th>已綁定機器</th>
+                    <th>建立時間</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 動態載入 -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let ADMIN_KEY = "";
+
+    function login() {
+        ADMIN_KEY = document.getElementById('adminKeyInput').value;
+        if (!ADMIN_KEY) return alert("請輸入 Key");
+        
+        // 嘗試抓取一次列表驗證 Key
+        loadLicenses(true);
+    }
+
+    function logout() {
+        ADMIN_KEY = "";
+        document.getElementById('authPanel').style.display = 'flex';
+        document.getElementById('mainPanel').style.display = 'none';
+    }
+
+    async function apiFetch(path, options = {}) {
+        options.headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        const res = await fetch(path, options);
+        if (res.status === 403) {
+            alert("ADMIN_KEY 驗證失敗");
+            logout();
+            throw new Error("Unauthorized");
+        }
+        return res.json();
+    }
+
+    async function loadLicenses(isLogin = false) {
+        try {
+            const data = await apiFetch('/api/stockai/admin/licenses');
+            if (data.success) {
+                if (isLogin) {
+                    document.getElementById('authPanel').style.display = 'none';
+                    document.getElementById('mainPanel').style.display = 'block';
+                }
+                renderTable(data.licenses);
+            }
+        } catch (e) {}
+    }
+
+    function renderTable(licenses) {
+        const tbody = document.querySelector('#licenseTable tbody');
+        tbody.innerHTML = licenses.map(l => `
+            <tr>
+                <td><code>${l.license_key}</code></td>
+                <td>${l.tier.toUpperCase()}</td>
+                <td><span class="status-active">${l.status}</span></td>
+                <td>${l.machine_ids.length} / ${l.max_devices}</td>
+                <td>${new Date(l.created_at).toLocaleDateString()}</td>
+                <td><button onclick="clearHWID('${l.license_key}')" style="padding: 4px 8px; font-size: 12px;">重置</button></td>
+            </tr>
+        `).join('');
+    }
+
+    async function generateKeys() {
+        const count = document.getElementById('genCount').value;
+        const tier = document.getElementById('genTier').value;
+        const max_devices = document.getElementById('genMaxDevices').value;
+
+        const data = await apiFetch('/api/stockai/admin/generate', {
+            method: 'POST',
+            body: JSON.stringify({ count, tier, max_devices })
+        });
+
+        if (data.success) {
+            alert(`成功產生 ${data.keys.length} 組序號！正在準備匯出...`);
+            exportToExcel(data.keys, tier);
+            loadLicenses();
+        }
+    }
+
+    function exportToExcel(keys, tier) {
+        const wsData = keys.map(k => ({ "序號": k, "等級": tier, "狀態": "待售/未啟用" }));
+        const ws = XLSX.utils.json_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Licenses");
+        XLSX.writeFile(wb, `StockAI_Licenses_${tier}_${new Date().getTime()}.xlsx`);
+    }
+
+    async function clearHWID(key) {
+        const target = key || document.getElementById('rescueKey').value;
+        if (!target) return alert("請輸入序號");
+        
+        if (!confirm(`確定要清除序號 [${target}] 的所有硬體綁定嗎？`)) return;
+
+        const data = await apiFetch('/api/stockai/admin/clear-hwid', {
+            method: 'POST',
+            body: JSON.stringify({ license_key: target })
+        });
+
+        if (data.success) {
+            alert("綁定已重置");
+            loadLicenses();
+        }
+    }
+</script>
+
+</body>
+</html>

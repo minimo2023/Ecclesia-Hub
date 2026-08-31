@@ -1,0 +1,35 @@
+{
+    "advice": {
+        "good": {
+            "corner": "這一步能佔領角落，非常有利，建議下。",
+            "killMove": "這一步讓對手無路可走，建議下。",
+            "isBest": "這是最佳選擇（對手剩 {opponentChoices} 選擇），建議下。",
+            "limitMobility": "這一步能限制對手只剩 {opponentChoices} 選擇，建議下。",
+            "edge": "這一步能佔邊線，算穩健，建議下。"
+        },
+        "warning": {
+            "dangerZone": "這一步可能會讓對手佔角，建議換到 {altCoord}。",
+            "giveCorner": "這一步可能會讓對手搶到角落，建議換到 {altCoord}。",
+            "trapped": "這一步之後你只剩 {yourChoices} 選擇，建議換到 {altCoord}。",
+            "tooManyOptions": "下這裡對手有 {opponentChoices} 選擇，換到 {altCoord} 只剩 {altChoices}，建議換。"
+        },
+        "neutral": {
+            "ok": "這一步中規中矩，可以下。"
+        }
+    },
+    "replay": {
+        "summary": {
+            "excellent": "這局表現非常出色！幾乎沒有失誤。",
+            "good": "整體表現穩健，有幾個值得學習的地方。",
+            "average": "中規中矩，有些冒險的下法可以改進。",
+            "needsWork": "這局有不少失誤，讓我們來看看如何改進。"
+        },
+        "moveAnalysis": {
+            "missedCorner": "這一步錯過了佔領角落的機會。",
+            "gaveCorner": "這一步讓對手有機會佔領角落。",
+            "goodMove": "這是一步好棋。",
+            "badMove": "這一步不太理想。"
+        }
+    },
+    "version": "1.0"
+}

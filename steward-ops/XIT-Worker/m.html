@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+  <title>個人專屬服事看板</title>
+  <link rel="stylesheet" href="m.css?v=3" />
+  <style>
+    /* Attendance button — amber accent */
+    .attendance-btn {
+      display: none; /* shown by JS only for usher-of-the-day */
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 20px;
+      border-radius: 12px;
+      background-color: #f59e0b;
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.3);
+      transition: opacity 0.2s;
+    }
+    .attendance-btn:active { opacity: 0.8; }
+
+    /* Attendance number inputs */
+    .attendance-field { margin-bottom: 20px; }
+    .attendance-label {
+      display: block;
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .attendance-input {
+      width: 100%;
+      font-family: var(--font-family);
+      font-size: 36px;
+      font-weight: bold;
+      text-align: center;
+      padding: 14px 16px;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      outline: none;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color 0.2s;
+    }
+    .attendance-input:focus { border-color: var(--accent); }
+    .attendance-warning {
+      font-size: 12px;
+      color: #b45309;
+      text-align: center;
+      margin-top: 4px;
+    }
+    .success-msg {
+      color: #16a34a;
+      font-size: 14px;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <!-- 登入/綁定畫面 -->
+  <div id="loginScreen" class="screen">
+    <div class="login-container">
+      <h1 class="login-title">西屯禮拜堂<br>排班查詢系統</h1>
+      <p class="login-subtitle">請輸入您的姓名以綁定專屬看板</p>
+      <div class="input-group">
+        <input type="text" id="nameInput" placeholder="例如：同工姓名" autocomplete="off" />
+        <button id="loginBtn" class="primary-btn">登入</button>
+      </div>
+      <p id="loginError" class="error-msg" style="display: none;">找不到此同工，請確認名字</p>
+    </div>
+  </div>
+
+  <!-- 主儀表板畫面 -->
+  <div id="dashboardScreen" class="screen" style="display: none;">
+    <!-- 1. 頂部固定區 -->
+    <header class="sticky-header">
+      <div class="header-content">
+        <div class="header-top-row">
+          <h2 id="greetingMsg">嗨，你好</h2>
+          <button id="switchUserBtn" class="switch-user-btn" type="button">切換使用者</button>
+        </div>
+        <p id="periodMsg" class="period-text">以下是目前服事表：</p>
+      </div>
+      <div id="updateBanner" class="update-banner" style="display: none;">
+        📢 班表已有最新異動
+      </div>
+    </header>
+
+    <!-- 2. 中央滑動區 -->
+    <main class="scrollable-content">
+      <div id="emptyState" class="empty-state" style="display: none;">
+        <div class="empty-icon">📅</div>
+        <p>目前尚未排定服事</p>
+      </div>
+      <div id="cardsContainer" class="cards-container">
+        <!-- 卡片會由 JS 動態產生 -->
+      </div>
+    </main>
+
+    <!-- 3. 底部固定區 -->
+    <footer class="sticky-footer">
+      <!-- 招待才看得到此按鈕，且只有當天顯示 -->
+      <button id="openAttendanceBtn" class="attendance-btn">
+        📊 登記今日人數
+      </button>
+      <button id="openFeedbackBtn" class="primary-btn full-width">📝 傳送排班回饋</button>
+      <a href="/" class="desktop-link">切換至電腦版</a>
+    </footer>
+  </div>
+
+  <!-- 彈出式回饋視窗 (Modal) -->
+  <div id="feedbackModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <h3 class="modal-title">傳送排班回饋</h3>
+      <p class="modal-subtitle">請告訴排班總管您的排班限制 (例如：8/9 大堂不行)</p>
+      <textarea id="feedbackText" rows="4" placeholder="請在此輸入..."></textarea>
+      
+      <div id="rolePromptSection" class="role-prompt-section" style="display: none;">
+        <p class="role-prompt-msg">系統未偵測到服事項目，請勾選此回饋適用於：</p>
+        <div id="rolePromptOptions" class="role-prompt-options"></div>
+      </div>
+
+      <p id="feedbackError" class="error-msg" style="display: none;"></p>
+      <p id="feedbackSuccess" class="success-msg" style="display: none;"></p>
+      <div class="modal-actions">
+        <button id="cancelFeedbackBtn" class="secondary-btn">取消</button>
+        <button id="submitFeedbackBtn" class="primary-btn">送出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 人數登記 Modal -->
+  <div id="attendanceModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <h3 class="modal-title">登記今日人數</h3>
+      <p id="attendanceSubtitle" class="modal-subtitle" style="color: var(--accent); font-weight: bold;">--</p>
+
+      <div class="attendance-field">
+        <label class="attendance-label" for="physicalCount">🏠 實體人數</label>
+        <input id="physicalCount" class="attendance-input" type="number" min="0" placeholder="0" inputmode="numeric" />
+      </div>
+      <div class="attendance-field">
+        <label class="attendance-label" for="onlineCount">💻 線上人數</label>
+        <input id="onlineCount" class="attendance-input" type="number" min="0" placeholder="0" inputmode="numeric" />
+      </div>
+
+      <p class="attendance-warning">⚠️ 僅限今日登記，補登請使用網頁版</p>
+
+      <p id="attendanceError" class="error-msg" style="display: none;"></p>
+      <p id="attendanceSuccess" class="success-msg" style="display: none;"></p>
+
+      <div class="modal-actions">
+        <button id="cancelAttendanceBtn" class="secondary-btn">取消</button>
+        <button id="submitAttendanceBtn" class="primary-btn">確認送出</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="m.js?v=8"></script>
+</body>
+</html>
