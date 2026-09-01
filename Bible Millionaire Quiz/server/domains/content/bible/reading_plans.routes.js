@@ -65,22 +65,21 @@ router.get('/fetch-local', async (req, res) => {
         const targetVersion = resolvedVersion.storageVersion;
         let query = 'SELECT * FROM bible_verses WHERE book = $1 AND chapter = $2 AND version = $3';
         let params = [book, chapter, targetVersion];
-        
-        let paramIndex = 4;
-        if (verse_start && verse_end) {
-            query += ` AND verse >= $${paramIndex} AND verse <= $${paramIndex + 1}`;
-            params.push(verse_start, verse_end);
-        } else if (verse_start) {
-            query += ` AND verse >= $${paramIndex}`;
-            params.push(verse_start);
-        }
-        
         query += ' ORDER BY verse ASC';
 
         const result = await dbOps.contentDb.query(query, params);
+        const requestedStart = Number.parseInt(verse_start, 10);
+        const requestedEnd = Number.parseInt(verse_end, 10);
+        const verses = presentBibleChapterVerses(result.rows || result).filter(verse => {
+            const rowStart = Number(verse.verseStart ?? verse.verse);
+            const rowEnd = Number(verse.verseEnd ?? verse.verse);
+            if (Number.isSafeInteger(requestedStart) && rowEnd < requestedStart) return false;
+            if (Number.isSafeInteger(requestedEnd) && rowStart > requestedEnd) return false;
+            return true;
+        });
         
         res.json({
-            verses: result.rows || result,
+            verses,
             version: {
                 requested: version || 'CUV_TRAD',
                 canonical: resolvedVersion.canonicalVersion,

@@ -77,6 +77,8 @@ function positiveVerseNumber(value) {
 
 export function presentBibleVerse({ text, metadata } = {}) {
     const parsedMetadata = parseMetadata(metadata);
+    const hiddenSourceText = ['SOURCE_TEXT_UNAVAILABLE', 'NON_SCRIPTURE_ARTIFACT']
+        .includes(parsedMetadata.verse_status);
     let bodyText = String(text || '');
     let sectionHeadings = Array.isArray(parsedMetadata.section_headings)
         ? parsedMetadata.section_headings.map(normalizeFhlMarkupText).filter(Boolean)
@@ -91,6 +93,8 @@ export function presentBibleVerse({ text, metadata } = {}) {
         lineBreakAfter = split.lineBreakAfter;
         paragraphBreakAfter = split.paragraphBreakAfter;
     }
+
+    if (hiddenSourceText) bodyText = '';
 
     return {
         text: cleanBibleDisplayText(bodyText),
@@ -121,6 +125,8 @@ export function presentBibleChapterVerses(rows = []) {
             verseLabel: verse ? String(verse) : '',
             coveredVerses: verse ? [verse] : [],
             isMergedVerse: false,
+            _hiddenSourceRow: ['SOURCE_TEXT_UNAVAILABLE', 'NON_SCRIPTURE_ARTIFACT']
+                .includes(metadata.verse_status),
             _mergeStatus: metadata.verse_status,
             _mergedIntoVerse: positiveVerseNumber(metadata.merged_into_verse)
         };
@@ -133,6 +139,16 @@ export function presentBibleChapterVerses(rows = []) {
     );
     const hiddenPlaceholders = new Set();
 
+    for (let index = 0; index < presentedRows.length; index += 1) {
+        const row = presentedRows[index];
+        if (!row._hiddenSourceRow) continue;
+        const next = presentedRows.slice(index + 1).find(candidate => !candidate._hiddenSourceRow);
+        if (next && row.sectionHeadings.length) {
+            next.sectionHeadings = [...new Set([...row.sectionHeadings, ...next.sectionHeadings])];
+        }
+        hiddenPlaceholders.add(row.verse);
+    }
+
     for (const row of presentedRows) {
         if (row._mergeStatus !== 'MERGED_WITH_PREVIOUS' || !row._mergedIntoVerse) continue;
         const target = rowsByVerse.get(row._mergedIntoVerse);
@@ -144,12 +160,22 @@ export function presentBibleChapterVerses(rows = []) {
         target.isMergedVerse = true;
         target.lineBreakAfter = target.lineBreakAfter || row.lineBreakAfter;
         target.paragraphBreakAfter = target.paragraphBreakAfter || row.paragraphBreakAfter;
+        if (row.sectionHeadings.length) {
+            const next = presentedRows.find(candidate => (
+                candidate.verse > row.verse
+                && !candidate._hiddenSourceRow
+                && candidate._mergeStatus !== 'MERGED_WITH_PREVIOUS'
+            ));
+            if (next) {
+                next.sectionHeadings = [...new Set([...row.sectionHeadings, ...next.sectionHeadings])];
+            }
+        }
         hiddenPlaceholders.add(row.verse);
     }
 
     return presentedRows
         .filter(row => !hiddenPlaceholders.has(row.verse))
-        .map(({ _mergeStatus, _mergedIntoVerse, ...row }) => row);
+        .map(({ _hiddenSourceRow, _mergeStatus, _mergedIntoVerse, ...row }) => row);
 }
 
 export default {

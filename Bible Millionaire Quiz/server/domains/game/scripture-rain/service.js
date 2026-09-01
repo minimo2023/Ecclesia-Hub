@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { dbOps } from '../../../database/index.js';
 import { bibleTranslator } from '../../../utils/bibleTranslator.js';
 import { applyCoinDeltaTx } from '../../economy/AssetLedgerService.js';
+import { presentBibleChapterVerses } from '../../content/bible/BibleTextPresentation.js';
 import {
-    canonicalizeVerses,
     sha256,
     stripEditorialAnnotations,
     validateCustomRange,
@@ -172,24 +172,27 @@ async function loadPassage(passage) {
         throw new ScriptureRainError('INVALID_BIBLE_BOOK', '書卷名稱無效');
     }
     const rows = await dbOps.contentDb.query(`
-        SELECT id, book, chapter, verse, text
+        SELECT id, book, chapter, verse, text, metadata
         FROM bible_verses
         WHERE version = 'CUV_TRAD' AND book = $1 AND chapter = $2
-          AND verse BETWEEN $3 AND $4
         ORDER BY verse
-    `, [englishBook, passage.chapter, passage.verseStart, passage.verseEnd]);
+    `, [englishBook, passage.chapter]);
 
-    const expected = passage.verseEnd - passage.verseStart + 1;
-    const canonical = canonicalizeVerses(rows);
-    if (canonical.length !== expected) {
+    const canonical = presentBibleChapterVerses(rows).filter(verse => (
+        Number(verse.verseEnd ?? verse.verse) >= passage.verseStart
+        && Number(verse.verseStart ?? verse.verse) <= passage.verseEnd
+    ));
+    const coveredVerses = new Set(canonical.flatMap(verse => verse.coveredVerses || [verse.verse]));
+    const missingVerse = Array.from(
+        { length: passage.verseEnd - passage.verseStart + 1 },
+        (_, index) => passage.verseStart + index
+    ).find(verse => !coveredVerses.has(verse));
+    if (missingVerse) {
         throw new ScriptureRainError('PASSAGE_INCOMPLETE', '正式和合本缺少此題所需經節', 422);
     }
 
-    const verses = canonical.map((row, index) => {
+    const verses = canonical.map(row => {
         const verseNumber = Number(row.verse);
-        if (verseNumber !== passage.verseStart + index) {
-            throw new ScriptureRainError('PASSAGE_INCOMPLETE', '正式經文範圍不連續', 422);
-        }
         return {
             verse: verseNumber,
             text: stripEditorialAnnotations(row.text)
@@ -237,8 +240,8 @@ export async function scriptureRainChapter(input = {}) {
     if (!Number.isSafeInteger(chapter) || chapter < 1 || chapter > 150) {
         throw new ScriptureRainError('INVALID_BIBLE_CHAPTER', '章節無效');
     }
-    const rows = canonicalizeVerses(await dbOps.contentDb.query(`
-        SELECT id, book, chapter, verse, text
+    const rows = presentBibleChapterVerses(await dbOps.contentDb.query(`
+        SELECT id, book, chapter, verse, text, metadata
         FROM bible_verses
         WHERE version = 'CUV_TRAD' AND book = $1 AND chapter = $2
         ORDER BY verse
@@ -251,10 +254,10 @@ export async function scriptureRainChapter(input = {}) {
         chapter,
         verses: rows.map(row => ({
             verse: row.verse,
-            verseStart: row.verse,
-            verseEnd: row.verse,
-            verseLabel: String(row.verse),
-            coveredVerses: [row.verse],
+            verseStart: row.verseStart,
+            verseEnd: row.verseEnd,
+            verseLabel: row.verseLabel,
+            coveredVerses: row.coveredVerses,
             text: stripEditorialAnnotations(row.text)
         }))
     };

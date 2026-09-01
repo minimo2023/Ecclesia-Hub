@@ -141,6 +141,18 @@ test('recording module remains isolated from AI, points, public uploads and form
     assert.doesNotMatch(`${schema}\n${service}\n${routes}`, /asset_ledger|adjustCoins|LogosEngine|Gemini/i);
 });
 
+test('recording passages and shared blessings use merged scripture presentation', async () => {
+    const [service, sharePage] = await Promise.all([
+        readFile(new URL('../domains/scripture-tools/recording-service.js', import.meta.url), 'utf8'),
+        readFile(new URL('../../src/features/scripture-recording/VoiceBlessingSharePage.jsx', import.meta.url), 'utf8')
+    ]);
+
+    assert.match(service, /presentBibleChapterVerses\(chapterRows\)/);
+    assert.match(service, /coveredVerses/);
+    assert.match(service, /verseLabel/);
+    assert.match(sharePage, /verse\.verseLabel \?\? verse\.verse/);
+});
+
 test('voice blessings remain member recordings when their share expires or is revoked', async () => {
     const [schema, service, api, collection, desktopMember, mobileMember] = await Promise.all([
         readFile(new URL('../database/schemas/scripture_recordings.js', import.meta.url), 'utf8'),

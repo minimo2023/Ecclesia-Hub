@@ -1,6 +1,7 @@
 import { dbOps } from '../../../database/index.js';
 import { bibleTranslator } from '../../../utils/bibleTranslator.js';
 import { getBibleCorpusPolicy } from '../../content/bible/BibleCorpusPolicy.js';
+import { presentBibleChapterVerses } from '../../content/bible/BibleTextPresentation.js';
 import { QUESTION_VERSION_ALIASES, resolveBibleVersion } from '../../content/bible/BibleVersionRegistry.js';
 
 export const SUPPORTED_QUESTION_VERSIONS = QUESTION_VERSION_ALIASES;
@@ -45,26 +46,34 @@ export async function getExactQuestionEvidence(question, db = dbOps.contentDb) {
         return { available: false, reason: 'MISSING_VERSE_RANGE', version, book, chapter, verses: [] };
     }
 
-    const verses = await db.query(`
+    const chapterVerses = await db.query(`
         SELECT book, chapter, verse, text, version, source, metadata
         FROM bible_verses
         WHERE version = $1
           AND book = $2
           AND chapter = $3
-          AND verse BETWEEN $4 AND $5
         ORDER BY verse
-    `, [resolvedVersion.storageVersion, book, chapter, verseStart, verseEnd]);
+    `, [resolvedVersion.storageVersion, book, chapter]);
 
-    const normalized = Array.isArray(verses) ? verses : [];
-    const verseNumbers = new Set(normalized.map(item => Number(item.verse)));
-    const hasStart = verseNumbers.has(verseStart);
-    const hasEnd = verseNumbers.has(verseEnd);
+    const normalized = presentBibleChapterVerses(Array.isArray(chapterVerses) ? chapterVerses : [])
+        .filter(item => (
+            Number(item.verseEnd ?? item.verse) >= verseStart
+            && Number(item.verseStart ?? item.verse) <= verseEnd
+        ));
+    const coveredVerses = new Set(normalized.flatMap(item => item.coveredVerses || [item.verse]));
+    const hasStart = coveredVerses.has(verseStart);
+    const hasEnd = coveredVerses.has(verseEnd);
     const hasBlank = normalized.some(item => !String(item.text || '').trim());
+    const hasSourcePlaceholder = normalized.some(item => String(item.text || '').trim().toLowerCase() === 'a');
 
-    if (normalized.length === 0 || !hasStart || !hasEnd || hasBlank) {
+    if (normalized.length === 0 || !hasStart || !hasEnd || hasBlank || hasSourcePlaceholder) {
         return {
             available: false,
-            reason: hasBlank ? 'BLANK_EVIDENCE_TEXT' : 'EXACT_VERSION_EVIDENCE_MISSING',
+            reason: hasSourcePlaceholder
+                ? 'SOURCE_PLACEHOLDER_NOT_REPAIRED'
+                : hasBlank
+                    ? 'BLANK_EVIDENCE_TEXT'
+                    : 'EXACT_VERSION_EVIDENCE_MISSING',
             version,
             canonicalVersion: resolvedVersion.canonicalVersion,
             storageVersion: resolvedVersion.storageVersion,
@@ -92,6 +101,10 @@ export async function getExactQuestionEvidence(question, db = dbOps.contentDb) {
         verseEnd,
         verses: normalized.map(item => ({
             verse: Number(item.verse),
+            verseStart: Number(item.verseStart ?? item.verse),
+            verseEnd: Number(item.verseEnd ?? item.verse),
+            verseLabel: item.verseLabel || String(item.verse),
+            coveredVerses: item.coveredVerses || [Number(item.verse)],
             text: item.text,
             version: item.version,
             source: item.source,

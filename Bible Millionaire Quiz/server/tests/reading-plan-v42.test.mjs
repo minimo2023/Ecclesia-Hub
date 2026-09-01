@@ -62,4 +62,5 @@ test('reading-plan route returns passage identity needed by the shared scripture
         'utf8'
     ));
     assert.match(source, /chapterTitle:[\s\S]*?book,[\s\S]*?chapter,[\s\S]*?references:/);
+    assert.match(source, /fetch-local[\s\S]*?presentBibleChapterVerses\(result\.rows \|\| result\)/);
 });

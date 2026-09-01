@@ -77,7 +77,7 @@ function buildGenerationContext(question, evidence) {
                 ? `-${question.verseEnd ?? question.verse_end}`
                 : ''}`,
         version: question.version,
-        evidence_text: evidence.verses.map(item => `${item.verse}. ${item.text}`).join('\n'),
+        evidence_text: evidence.verses.map(item => `${item.verseLabel || item.verse}. ${item.text}`).join('\n'),
         question: question.question,
         answer: question.answer,
         category: question.category || 'verse_fact',

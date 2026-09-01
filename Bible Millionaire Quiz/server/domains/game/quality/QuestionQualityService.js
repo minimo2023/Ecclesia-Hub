@@ -180,7 +180,7 @@ export async function auditQuestionCandidate(question, { db = dbOps.contentDb, a
         version: question.version,
         reference: `${question.book} ${question.chapter}:${evidence.verseStart}`
             + `${evidence.verseEnd > evidence.verseStart ? `-${evidence.verseEnd}` : ''}`,
-        evidence_text: evidence.verses.map(item => `${item.verse}. ${item.text}`).join('\n'),
+        evidence_text: evidence.verses.map(item => `${item.verseLabel || item.verse}. ${item.text}`).join('\n'),
         distractors_1: (sets[0] || []).join('、'),
         distractors_2: (sets[1] || []).join('、'),
         distractors_3: (sets[2] || []).join('、'),

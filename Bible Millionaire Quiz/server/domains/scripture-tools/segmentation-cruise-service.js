@@ -184,6 +184,12 @@ async function loadBatch(offset, limit) {
         SELECT book, chapter, verse, text
         FROM bible_verses
         WHERE version = $1
+          AND COALESCE(metadata->>'verse_status', 'TEXT') NOT IN (
+              'MERGED_WITH_PREVIOUS',
+              'SOURCE_TEXT_UNAVAILABLE',
+              'NON_SCRIPTURE_ARTIFACT'
+          )
+          AND LOWER(BTRIM(COALESCE(text, ''))) NOT IN ('', 'a')
         ORDER BY array_position($2::text[], book), chapter, verse
         OFFSET $3 LIMIT $4
     `, [CRUISE_VERSION, canonicalEnglishBooks, offset, limit]);
@@ -307,7 +313,15 @@ export async function startSegmentationCruise({ dryRun = true, batchSize = DEFAU
     }
     await seedProtectedTerms();
     const countRow = await dbOps.contentDb.get(`
-        SELECT COUNT(*)::integer AS count FROM bible_verses WHERE version = $1
+        SELECT COUNT(*)::integer AS count
+        FROM bible_verses
+        WHERE version = $1
+          AND COALESCE(metadata->>'verse_status', 'TEXT') NOT IN (
+              'MERGED_WITH_PREVIOUS',
+              'SOURCE_TEXT_UNAVAILABLE',
+              'NON_SCRIPTURE_ARTIFACT'
+          )
+          AND LOWER(BTRIM(COALESCE(text, ''))) NOT IN ('', 'a')
     `, [CRUISE_VERSION]);
     const total = Number(countRow?.count || 0);
     if (total === 0) throw new SegmentationCruiseError('SCRIPTURE_SOURCE_EMPTY', '找不到和合本正式經文', 409);

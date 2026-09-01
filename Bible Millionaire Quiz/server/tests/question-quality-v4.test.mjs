@@ -135,6 +135,7 @@ test('source version cannot be substituted across internal translations', async 
 
 test('audited modern Chinese compatibility storage is pinned to FHL tcv2019', async () => {
     assert.equal(FHL_FIXED_VERSION_MAP.TCV2010_TRAD, 'tcv2019');
+    assert.equal(FHL_FIXED_VERSION_MAP.LCC_TRAD, 'lcc');
     const service = new FhlBibleSyncService();
     assert.equal(await service.resolveSourceVersion(null, 'TCV2010_TRAD'), 'tcv2019');
 });
@@ -228,6 +229,67 @@ test('exact evidence preserves requested identity while querying canonical stora
     assert.equal(evidence.canonicalVersion, 'TCV2019_TRAD');
     assert.equal(evidence.storageVersion, 'TCV2010_TRAD');
     assert.equal(calls[1].params[0], 'TCV2010_TRAD');
+});
+
+test('exact evidence resolves a merged placeholder to its verified source range', async () => {
+    const db = {
+        async get() {
+            return {
+                version_id: 'TCV2019_TRAD', source_version: 'tcv2019', coverage_status: 'COMPLETE',
+                evidence_eligible: true, new_question_eligible: false,
+                active_sync_run_id: 'sync-tcv', active_promotion_id: null
+            };
+        },
+        async query(_sql, params) {
+            assert.deepEqual(params, ['TCV2010_TRAD', '1 Chronicles', 4]);
+            return [
+                {
+                    book: '1 Chronicles', chapter: 4, verse: 17, text: '第十七至十八節的合併正文',
+                    version: 'TCV2010_TRAD', source: 'FHL_SYNC',
+                    metadata: { source_version: 'tcv2019', verse_status: 'MERGED_RANGE_ANCHOR', merged_verse_end: 18 }
+                },
+                {
+                    book: '1 Chronicles', chapter: 4, verse: 18, text: 'a',
+                    version: 'TCV2010_TRAD', source: 'FHL_SYNC',
+                    metadata: { source_version: 'tcv2019', verse_status: 'MERGED_WITH_PREVIOUS', merged_into_verse: 17 }
+                }
+            ];
+        }
+    };
+
+    const evidence = await getExactQuestionEvidence({
+        version: 'TCV2010_TRAD', book: '歷代志上', chapter: 4, verse_start: 18, verse_end: 18
+    }, db);
+
+    assert.equal(evidence.available, true);
+    assert.equal(evidence.verses.length, 1);
+    assert.equal(evidence.verses[0].verseLabel, '17–18');
+    assert.deepEqual(evidence.verses[0].coveredVerses, [17, 18]);
+    assert.equal(evidence.verses[0].text, '第十七至十八節的合併正文');
+});
+
+test('exact evidence blocks an unannotated source placeholder from AI use', async () => {
+    const db = {
+        async get() {
+            return {
+                version_id: 'TCV2019_TRAD', source_version: 'tcv2019', coverage_status: 'COMPLETE',
+                evidence_eligible: true, new_question_eligible: false
+            };
+        },
+        async query() {
+            return [{
+                book: '1 Chronicles', chapter: 4, verse: 18, text: 'a',
+                version: 'TCV2010_TRAD', source: 'FHL_SYNC', metadata: { source_version: 'tcv2019' }
+            }];
+        }
+    };
+
+    const evidence = await getExactQuestionEvidence({
+        version: 'TCV2010_TRAD', book: '歷代志上', chapter: 4, verse_start: 18, verse_end: 18
+    }, db);
+
+    assert.equal(evidence.available, false);
+    assert.equal(evidence.reason, 'SOURCE_PLACEHOLDER_NOT_REPAIRED');
 });
 
 test('offline importer allowlist contains only the approved A1 and A2 packages', () => {

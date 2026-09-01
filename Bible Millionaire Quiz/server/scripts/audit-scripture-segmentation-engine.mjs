@@ -47,7 +47,7 @@ function finalWord(value) {
 
 try {
     const { rows } = await pool.query(`
-        SELECT version, book, chapter, verse, text
+        SELECT version, book, chapter, verse, text, metadata
         FROM bible_verses
         WHERE version = ANY($1::text[])
         ORDER BY version, book, chapter, verse
@@ -59,6 +59,14 @@ try {
         aspectParticleCuts: 0,
         genitiveTailCuts: 0,
         causativeTailCuts: 0,
+        intentionalMergedPlaceholders: 0,
+        intentionalSourceUnavailable: 0,
+        intentionalEditorialNotes: 0,
+        intentionalNonScriptureArtifacts: 0,
+        unexpectedOmissions: 0,
+        invalidMergedPlaceholders: 0,
+        invalidSourceUnavailable: 0,
+        invalidNonScriptureArtifacts: 0,
         memoryReady: 0,
         voiceReady: 0,
         sourceStates: {},
@@ -74,9 +82,54 @@ try {
             longExceptions: [],
             aspectParticleCuts: [],
             genitiveTailCuts: [],
-            causativeTailCuts: []
+            causativeTailCuts: [],
+            mergedPlaceholders: [],
+            invalidMergedPlaceholders: [],
+            sourceUnavailable: [],
+            invalidSourceUnavailable: [],
+            editorialNotes: [],
+            nonScriptureArtifacts: [],
+            invalidNonScriptureArtifacts: []
         }
     }]));
+
+    const parseMetadata = value => {
+        if (value && typeof value === 'object') return value;
+        try { return JSON.parse(value || '{}'); } catch { return {}; }
+    };
+    const rowKey = row => `${row.version}\u0000${row.book}\u0000${row.chapter}\u0000${row.verse}`;
+    const rowsByReference = new Map(rows.map(row => [rowKey(row), row]));
+    const mergedPlaceholderState = row => {
+        const metadata = parseMetadata(row.metadata);
+        if (metadata.verse_status !== 'MERGED_WITH_PREVIOUS') return { marked: false, valid: false };
+        const mergedIntoVerse = Number(metadata.merged_into_verse);
+        const anchor = rowsByReference.get(rowKey({ ...row, verse: mergedIntoVerse }));
+        const anchorMetadata = parseMetadata(anchor?.metadata);
+        const placeholderText = String(row.text || '').trim().toLowerCase();
+        const anchorText = String(anchor?.text || '').trim().toLowerCase();
+        const valid = ['', 'a'].includes(placeholderText)
+            && Number.isInteger(mergedIntoVerse)
+            && mergedIntoVerse > 0
+            && mergedIntoVerse < Number(row.verse)
+            && Boolean(anchor)
+            && !['', 'a'].includes(anchorText)
+            && anchorMetadata.verse_status === 'MERGED_RANGE_ANCHOR'
+            && Number(anchorMetadata.merged_verse_end) >= Number(row.verse);
+        return { marked: true, valid, mergedIntoVerse };
+    };
+    const sourceUnavailableState = row => {
+        const metadata = parseMetadata(row.metadata);
+        if (metadata.verse_status !== 'SOURCE_TEXT_UNAVAILABLE') return { marked: false, valid: false };
+        return {
+            marked: true,
+            valid: String(row.text || '').trim() === ''
+        };
+    };
+    const nonScriptureArtifactState = row => {
+        const metadata = parseMetadata(row.metadata);
+        if (metadata.verse_status !== 'NON_SCRIPTURE_ARTIFACT') return { marked: false, valid: false };
+        return { marked: true, valid: true };
+    };
 
     for (const row of rows) {
         const report = reports[row.version];
@@ -94,6 +147,32 @@ try {
         if (result.memoryReady) report.memoryReady += 1;
         if (result.voiceReady) report.voiceReady += 1;
         const reference = `${row.book} ${row.chapter}:${row.verse}`;
+        const mergedPlaceholder = mergedPlaceholderState(row);
+        const sourceUnavailable = sourceUnavailableState(row);
+        const nonScriptureArtifact = nonScriptureArtifactState(row);
+        if (mergedPlaceholder.marked && !mergedPlaceholder.valid) {
+            report.invalidMergedPlaceholders += 1;
+            sample(report.samples.invalidMergedPlaceholders, {
+                reference,
+                rawText: row.text,
+                mergedIntoVerse: mergedPlaceholder.mergedIntoVerse
+            });
+        }
+        if (sourceUnavailable.marked && !sourceUnavailable.valid) {
+            report.invalidSourceUnavailable += 1;
+            sample(report.samples.invalidSourceUnavailable, {
+                reference,
+                rawText: row.text
+            });
+        }
+        if (nonScriptureArtifact.marked && result.displayText) {
+            report.invalidNonScriptureArtifacts += 1;
+            sample(report.samples.invalidNonScriptureArtifacts, {
+                reference,
+                rawText: row.text,
+                displayText: result.displayText
+            });
+        }
         if (result.fragments.join('') !== result.displayText) {
             report.exactFailures += 1;
             sample(report.samples.exactFailures, {
@@ -105,7 +184,25 @@ try {
             });
         }
         if (!result.displayText) {
-            sample(report.samples.omitted, { reference, rawText: row.text, issues: result.issues });
+            if (mergedPlaceholder.valid) {
+                report.intentionalMergedPlaceholders += 1;
+                sample(report.samples.mergedPlaceholders, {
+                    reference,
+                    mergedIntoVerse: mergedPlaceholder.mergedIntoVerse
+                });
+            } else if (sourceUnavailable.valid) {
+                report.intentionalSourceUnavailable += 1;
+                sample(report.samples.sourceUnavailable, { reference });
+            } else if (nonScriptureArtifact.valid) {
+                report.intentionalNonScriptureArtifacts += 1;
+                sample(report.samples.nonScriptureArtifacts, { reference, rawText: row.text });
+            } else if (result.issues.includes('EDITORIAL_NOTE_ONLY_VERSE')) {
+                report.intentionalEditorialNotes += 1;
+                sample(report.samples.editorialNotes, { reference, rawText: row.text });
+            } else {
+                report.unexpectedOmissions += 1;
+                sample(report.samples.omitted, { reference, rawText: row.text, issues: result.issues });
+            }
         }
         if (result.sourceState === 'REVIEW_REQUIRED') {
             sample(report.samples.sourceReview, {
@@ -180,6 +277,10 @@ try {
         || report.aspectParticleCuts > 0
         || report.genitiveTailCuts > 0
         || report.causativeTailCuts > 0
+        || report.unexpectedOmissions > 0
+        || report.invalidMergedPlaceholders > 0
+        || report.invalidSourceUnavailable > 0
+        || report.invalidNonScriptureArtifacts > 0
         || Number(report.sourceStates.REVIEW_REQUIRED || 0) > 0
     ));
     process.exitCode = failed ? 1 : 0;

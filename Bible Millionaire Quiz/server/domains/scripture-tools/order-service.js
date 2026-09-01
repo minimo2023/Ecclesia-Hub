@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { dbOps } from '../../database/index.js';
 import { bibleTranslator } from '../../utils/bibleTranslator.js';
 import { applyCoinDeltaTx } from '../economy/AssetLedgerService.js';
+import { presentBibleChapterVerses } from '../content/bible/BibleTextPresentation.js';
 import {
     ORDER_LAB_DIFFICULTIES,
     ORDER_LAYOUT_DIFFICULTIES,
@@ -10,7 +11,6 @@ import {
     ORDER_LAB_VERSION,
     SEED_PASSAGES,
     buildStepOptions,
-    canonicalizeVerses,
     classifyDifficulty,
     completionScore,
     publicOptions,
@@ -155,21 +155,22 @@ async function loadVerseRange({ book, chapter, verseStart, verseEnd }) {
         throw new OrderLabError('INVALID_BIBLE_BOOK', '書卷名稱無效');
     }
     const rows = await dbOps.contentDb.query(`
-        SELECT id, book, chapter, verse, text
+        SELECT id, book, chapter, verse, text, metadata
         FROM bible_verses
         WHERE version = 'CUV_TRAD' AND book = $1 AND chapter = $2
-          AND verse BETWEEN $3 AND $4
         ORDER BY verse
-    `, [englishBook, chapter, verseStart, verseEnd]);
-    const verses = canonicalizeVerses(rows);
-    const expected = verseEnd - verseStart + 1;
-    if (verses.length !== expected) {
+    `, [englishBook, chapter]);
+    const verses = presentBibleChapterVerses(rows).filter(verse => (
+        Number(verse.verseEnd ?? verse.verse) >= verseStart
+        && Number(verse.verseStart ?? verse.verse) <= verseEnd
+    ));
+    const coveredVerses = new Set(verses.flatMap(verse => verse.coveredVerses || [verse.verse]));
+    const missingVerse = Array.from(
+        { length: verseEnd - verseStart + 1 },
+        (_, index) => verseStart + index
+    ).find(verse => !coveredVerses.has(verse));
+    if (missingVerse) {
         throw new OrderLabError('PASSAGE_INCOMPLETE', '正式和合本缺少所選範圍的部分經節', 422);
-    }
-    for (let index = 0; index < verses.length; index += 1) {
-        if (verses[index].verse !== verseStart + index) {
-            throw new OrderLabError('PASSAGE_INCOMPLETE', '所選經文範圍不連續', 422);
-        }
     }
     return verses;
 }
@@ -184,12 +185,12 @@ async function loadChapter({ book, chapter }) {
         throw new OrderLabError('INVALID_BIBLE_CHAPTER', '章節無效');
     }
     const rows = await dbOps.contentDb.query(`
-        SELECT id, book, chapter, verse, text
+        SELECT id, book, chapter, verse, text, metadata
         FROM bible_verses
         WHERE version = 'CUV_TRAD' AND book = $1 AND chapter = $2
         ORDER BY verse
     `, [englishBook, chapterNumber]);
-    const verses = canonicalizeVerses(rows);
+    const verses = presentBibleChapterVerses(rows);
     if (verses.length === 0) throw new OrderLabError('PASSAGE_NOT_FOUND', '找不到所選章節的正式和合本經文', 404);
     return {
         version: { id: 'CUV_TRAD', name: '和合本' },
@@ -200,10 +201,10 @@ async function loadChapter({ book, chapter }) {
             const text = stripEditorialAnnotations(verse.text);
             return {
                 verse: verse.verse,
-                verseStart: verse.verse,
-                verseEnd: verse.verse,
-                verseLabel: String(verse.verse),
-                coveredVerses: [verse.verse],
+                verseStart: verse.verseStart,
+                verseEnd: verse.verseEnd,
+                verseLabel: verse.verseLabel,
+                coveredVerses: verse.coveredVerses,
                 text,
                 playable: Boolean(text),
                 unplayableReason: text ? null : 'EDITORIAL_NOTE_ONLY_VERSE'

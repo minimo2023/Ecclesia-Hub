@@ -297,7 +297,7 @@ export default function VoiceBlessingSharePage({ token }) {
                     </section>
 
                     <blockquote className="mt-5 border-l-[3px] border-current bg-white/65 px-4 py-4 font-serif text-lg leading-9 text-slate-800">
-                        {verses.map(verse => <span key={verse.verse}><sup className="mr-1 text-[11px] font-black">{verse.verse}</sup>{stripScriptureSpeechAnnotations(verse.text)} </span>)}
+                        {verses.map(verse => <span key={verse.verse}><sup className="mr-1 text-[11px] font-black">{verse.verseLabel ?? verse.verse}</sup>{stripScriptureSpeechAnnotations(verse.text)} </span>)}
                     </blockquote>
                     {card.message ? <p className="mt-5 whitespace-pre-wrap text-base leading-8 text-slate-800">{card.message}</p> : null}
                     <footer className="mt-5 border-t border-current/15 pt-4 text-sm font-black opacity-80">—— {card.signature}</footer>

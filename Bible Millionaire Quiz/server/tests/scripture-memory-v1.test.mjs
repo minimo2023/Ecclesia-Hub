@@ -552,3 +552,11 @@ test('legacy segmentation preview cache maps medium confidence into the reviewab
   const review = await read('server/domains/scripture-tools/segmentation-review-service.js');
   assert.match(review, /machine\.confidence === 'HIGH' \? 'HIGH' : 'LOW'/);
 });
+
+test('segmentation cruise never treats source placeholders as scripture fragments', async () => {
+  const cruise = await read('server/domains/scripture-tools/segmentation-cruise-service.js');
+  assert.match(cruise, /'MERGED_WITH_PREVIOUS'/);
+  assert.match(cruise, /'SOURCE_TEXT_UNAVAILABLE'/);
+  assert.match(cruise, /'NON_SCRIPTURE_ARTIFACT'/);
+  assert.match(cruise, /LOWER\(BTRIM\(COALESCE\(text, ''\)\)\) NOT IN \('', 'a'\)/);
+});

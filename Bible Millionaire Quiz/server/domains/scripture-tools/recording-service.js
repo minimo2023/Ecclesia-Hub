@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { dbOps } from '../../database/index.js';
 import { bibleTranslator } from '../../utils/bibleTranslator.js';
+import { presentBibleChapterVerses } from '../content/bible/BibleTextPresentation.js';
 import { resolveBibleVersion } from '../content/bible/BibleVersionRegistry.js';
 import recordingStorage from './recording-storage.js';
 import {
@@ -151,16 +152,22 @@ async function getRecordingRow(recordingId, queryable = dbOps.notesDb) {
 
 async function validatePassage(input) {
     const passage = normalizePassageInput(input);
-    const passageRows = rows(await dbOps.contentDb.query(`
-        SELECT verse, text
+    const chapterRows = rows(await dbOps.contentDb.query(`
+        SELECT verse, text, metadata
         FROM bible_verses
         WHERE version = $1 AND book = $2 AND chapter = $3
-          AND verse BETWEEN $4 AND $5
         ORDER BY verse
-    `, [passage.storageVersion, passage.book, passage.chapter, passage.verseStart, passage.verseEnd]));
-    if (!passageRows.length
-        || Number(passageRows[0].verse) !== passage.verseStart
-        || Number(passageRows.at(-1).verse) !== passage.verseEnd) {
+    `, [passage.storageVersion, passage.book, passage.chapter]));
+    const passageRows = presentBibleChapterVerses(chapterRows).filter(verse => (
+        Number(verse.verseEnd ?? verse.verse) >= passage.verseStart
+        && Number(verse.verseStart ?? verse.verse) <= passage.verseEnd
+    ));
+    const coveredVerses = new Set(passageRows.flatMap(verse => verse.coveredVerses || [verse.verse]));
+    const missingVerse = Array.from(
+        { length: passage.verseEnd - passage.verseStart + 1 },
+        (_, index) => passage.verseStart + index
+    ).find(verse => !coveredVerses.has(verse));
+    if (!passageRows.length || missingVerse) {
         throw recordingError('PASSAGE_EVIDENCE_UNAVAILABLE', '正式經文庫找不到完整的起訖經節');
     }
     return { ...passage, passageHash: hashPassageRows(passageRows) };
@@ -562,13 +569,16 @@ async function findActiveShare(token) {
 
 export async function getShare(token) {
     const share = await findActiveShare(token);
-    const verses = rows(await dbOps.contentDb.query(`
-        SELECT verse, text
+    const chapterRows = rows(await dbOps.contentDb.query(`
+        SELECT verse, text, metadata
         FROM bible_verses
         WHERE version = $1 AND book = $2 AND chapter = $3
-          AND verse BETWEEN $4 AND $5
         ORDER BY verse
-    `, [share.version, share.book, share.chapter, share.verseStart, share.verseEnd]));
+    `, [share.version, share.book, share.chapter]));
+    const verses = presentBibleChapterVerses(chapterRows).filter(verse => (
+        Number(verse.verseEnd ?? verse.verse) >= share.verseStart
+        && Number(verse.verseStart ?? verse.verse) <= share.verseEnd
+    ));
     const signature = share.signatureMode === 'member'
         ? (share.displayName || share.username || '一位讀者')
         : share.signatureMode === 'anonymous'
@@ -578,7 +588,14 @@ export async function getShare(token) {
         shareId: share.shareId,
         recording: mapSharedRecording(share),
         expiresAt: share.expiresAt,
-        verses: verses.map(verse => ({ verse: Number(verse.verse), text: verse.text })),
+        verses: verses.map(verse => ({
+            verse: Number(verse.verse),
+            verseStart: Number(verse.verseStart ?? verse.verse),
+            verseEnd: Number(verse.verseEnd ?? verse.verse),
+            verseLabel: verse.verseLabel || String(verse.verse),
+            coveredVerses: verse.coveredVerses || [Number(verse.verse)],
+            text: verse.text
+        })),
         card: share.shareKind === 'VOICE_BLESSING' ? {
             kind: 'VOICE_BLESSING',
             recipient: share.recipientLabel || '給親愛的你',

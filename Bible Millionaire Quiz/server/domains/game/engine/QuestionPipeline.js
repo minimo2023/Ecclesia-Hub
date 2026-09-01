@@ -91,7 +91,7 @@ async function generateStructuredDistractorSets(q) {
         chapter: q.chapter,
         reference: `${q.chapter}:${verseStart}${verseEnd > verseStart ? `-${verseEnd}` : ''}`,
         version: q.version,
-        evidence_text: evidence.verses.map(item => `${item.verse}. ${item.text}`).join('\n'),
+        evidence_text: evidence.verses.map(item => `${item.verseLabel || item.verse}. ${item.text}`).join('\n'),
         question: q.question,
         answer: q.answer,
         category: q.category || 'verse_fact',
