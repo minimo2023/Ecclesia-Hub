@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
-export const SCRIPTURE_SEGMENTATION_NORMALIZATION_VERSION = 'display-normalization-v4';
+export const SCRIPTURE_SEGMENTATION_NORMALIZATION_VERSION = 'display-normalization-v5-translation-profiles';
 
 function configuredTargetLength(value = process.env.SCRIPTURE_SEGMENTATION_TARGET_LENGTH) {
     const parsed = Number.parseInt(String(value || '8'), 10);
@@ -12,7 +12,7 @@ export const SCRIPTURE_SEGMENTATION_TARGET_LENGTH = configuredTargetLength();
 export const SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH = 10;
 export const SCRIPTURE_SEGMENTATION_MEMORY_PROFILE_VERSION = 'memory-segments-v1-t6-8-m10';
 export const SCRIPTURE_SEGMENTATION_RULE_VERSION =
-    'healthy-rule-v13-semantic-punctuation-t' + SCRIPTURE_SEGMENTATION_TARGET_LENGTH
+    'healthy-rule-v14-boundary-graph-t' + SCRIPTURE_SEGMENTATION_TARGET_LENGTH
     + '-m' + SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH;
 export const SCRIPTURE_SEGMENTATION_LEXICON_VERSION = String(
     process.env.SCRIPTURE_SEGMENTATION_LEXICON_VERSION || 'protected-terms-v4'
@@ -27,8 +27,23 @@ const approvedMemoryManifest = JSON.parse(readFileSync(
     'utf8'
 ));
 
-const EDITORIAL_MARKER = /(?:或譯|或作|有古卷|古卷(?:作|有)?|原文(?:作|是|直譯)?|小字|另作|註(?:：|:)?|意即|作：)/u;
-const TRANSLATION_LABEL = /(?:中文)?(?:新標點)?和合本|現代中文譯本(?:\s*1995)?|CUV|TCV/iu;
+const EDITORIAL_MARKER = /(?:或譯|或作|有古卷|古卷(?:作|有)?|原文(?:作|是|直譯)?|小字|另作|註(?:：|:)?|意即|作：|馬索拉|七十士譯本|古譯本|抄本|修譯)/u;
+const TRANSLATION_LABEL = /(?:中文)?(?:新標點)?和合本|現代中文譯本(?:\s*(?:1995|2010))?|呂振中譯本|中文新譯本|新譯本|CUV|LCC|TCV(?:2010)?|CNV/iu;
+const RESIDUAL_EDITORIAL_MARKER = /(?:【[^】]*(?:原文|或譯|或作|古卷|譯本|抄本)[^】]*】|《(?:馬索拉|七十士譯本)[^》]*》|本(?:節|章).{0,12}(?:抄本|細字|標題))/u;
+const TCV_EDITORIAL_TAIL = /(?:\r?\n\s*)s\s*:\s*另有些古卷有下列結語\s*:/iu;
+const TRANSLATION_NORMALIZATION_PROFILES = Object.freeze({
+    CUV_TRAD: Object.freeze({ id: 'CUV_TRAD', squareNumericNotes: false, crossReferenceNotes: false }),
+    LCC_TRAD: Object.freeze({ id: 'LCC_TRAD', squareNumericNotes: true, crossReferenceNotes: true }),
+    TCV2010_TRAD: Object.freeze({
+        id: 'TCV2010_TRAD', squareNumericNotes: true, crossReferenceNotes: true,
+        leadingHeadingWithReference: true
+    }),
+    CNV_TRAD: Object.freeze({
+        id: 'CNV_TRAD', squareNumericNotes: true, crossReferenceNotes: true,
+        leadingHeadingWithReference: true
+    }),
+    DEFAULT: Object.freeze({ id: 'DEFAULT', squareNumericNotes: false, crossReferenceNotes: false })
+});
 // 和合本部分詩篇把題註放進第一節的前置括號。這些內容是閱讀時可見的
 // 題註，但不是排序遊戲的答案；只移除「位於整節最前方」且明確帶有
 // 詩篇題註特徵的括號，避免誤刪正文中的括號內容。
@@ -36,13 +51,13 @@ const PSALM_SUPERSCRIPTION_MARKER = /(?:大衛|亞薩|可拉後裔|所羅門|摩
 const SENTENCE_END = new Set(Array.from('。！？!?'));
 const CLAUSE_END = new Set(Array.from('；：;:'));
 const PHRASE_END = new Set(Array.from('，、,'));
-const TRAILING_CLOSERS = new Set(Array.from('」』》〉】）)]}')); 
+const TRAILING_CLOSERS = new Set(Array.from('」』》〉】〕］）)]}'));
 // These marks belong to the preceding phrase. A word/semantic candidate placed
 // immediately before one of them would produce a visually and semantically
 // broken next fragment (for example "愛是恆久忍耐" + "，又有恩慈；").
 // Opening quotation/parenthesis marks are intentionally excluded because a
 // new fragment may legitimately begin with direct speech or a parenthesis.
-const LEADING_BOUNDARY_PUNCTUATION = /^[，、。；：！？，,;:!?」』》〉】）)\]}]/u;
+const LEADING_BOUNDARY_PUNCTUATION = /^[，、。；：！？，,;:!?」』》〉】〕］）)\]}]/u;
 const VISIBLE_CHARACTER = /[\p{L}\p{N}\p{Script=Han}]/u;
 const NON_SCRIPTURE_ONLY = /^(?:[a-z]|[*†‡]+)$/iu;
 // These multi-character discourse markers can begin a new natural clause. They
@@ -71,6 +86,7 @@ const DANGLING_SINGLE_CHARACTER_WORDS = new Set(Array.from(
     // their following object/predicate into the same memory unit.
     '使叫讓'
 ));
+const CAUSATIVE_GOVERNOR = /^(?:不|未|要|能|可|會|勿|別|莫|必)?(?:使|叫|讓)$/u;
 const DEPENDENT_FRAGMENT_START = /^的/u;
 const LITURGICAL_CONTINUATION = /^[（(]細拉[）)]/u;
 // Only these one-character segments are unambiguous standalone Chinese
@@ -82,6 +98,15 @@ const SAFE_SINGLE_CHARACTER_WORDS = new Set(Array.from(
 const WORD_SEGMENTER = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
     ? new Intl.Segmenter('zh-Hant', { granularity: 'word' })
     : null;
+export const SCRIPTURE_BOUNDARY_STATES = Object.freeze({
+    MUST: 'MUST',
+    PREFER: 'PREFER',
+    ALLOW: 'ALLOW',
+    REVIEW: 'REVIEW',
+    FORBID: 'FORBID',
+    HUMAN_APPROVED: 'HUMAN_APPROVED',
+    AI_APPROVED: 'AI_APPROVED'
+});
 
 function sha256(value) {
     return createHash('sha256').update(String(value)).digest('hex');
@@ -98,7 +123,8 @@ function hasIncompleteSemanticEnd(value) {
     const words = [...WORD_SEGMENTER.segment(text)]
         .filter(item => item.isWordLike);
     const finalWord = String(words.at(-1)?.segment || '');
-    return visibleLength(finalWord) === 1 && DANGLING_SINGLE_CHARACTER_WORDS.has(finalWord);
+    return (visibleLength(finalWord) === 1 && DANGLING_SINGLE_CHARACTER_WORDS.has(finalWord))
+        || CAUSATIVE_GOVERNOR.test(finalWord);
 }
 
 export function protectedCoreTerms() {
@@ -118,6 +144,9 @@ function buildApprovedMemoryMap() {
     }
     const result = new Map();
     for (const item of approvedMemoryManifest.entries || []) {
+        const version = String(
+            item?.version || approvedMemoryManifest.defaultVersion || 'CUV_TRAD'
+        ).trim().toUpperCase();
         const displayText = String(item?.displayText || '');
         const fragments = Array.isArray(item?.fragments) ? item.fragments.map(String) : [];
         if (!displayText || !fragments.length || fragments.join('') !== displayText) {
@@ -127,10 +156,13 @@ function buildApprovedMemoryMap() {
             || visibleLength(fragment) > SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH)) {
             throw new Error('APPROVED_MEMORY_FRAGMENT_INVALID:' + (item?.reference || 'UNKNOWN'));
         }
-        if (result.has(displayText)) {
+        const key = `${version}\u0000${displayText}`;
+        if (result.has(key)) {
             throw new Error('APPROVED_MEMORY_DUPLICATE_TEXT:' + (item?.reference || 'UNKNOWN'));
         }
-        result.set(displayText, {
+        result.set(key, {
+            version,
+            displayText,
             reference: String(item.reference || ''),
             fragments
         });
@@ -141,37 +173,87 @@ function buildApprovedMemoryMap() {
 const approvedMemoryByDisplayText = buildApprovedMemoryMap();
 
 export function approvedMemorySegmentations() {
-    return [...approvedMemoryByDisplayText.entries()].map(([displayText, item]) => ({
-        displayText,
+    return [...approvedMemoryByDisplayText.values()].map(item => ({
+        version: item.version,
+        displayText: item.displayText,
         reference: item.reference,
         fragments: [...item.fragments]
     }));
 }
 
 function segmentationRuleVersion(targetLength) {
-    return 'healthy-rule-v13-semantic-punctuation-t' + targetLength
+    return 'healthy-rule-v14-boundary-graph-t' + targetLength
         + '-m' + SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH;
 }
 
-function removeMarkedParentheses(value, open, close) {
+function normalizationProfile(version) {
+    const id = String(version || 'CUV_TRAD').trim().toUpperCase();
+    return TRANSLATION_NORMALIZATION_PROFILES[id]
+        || { ...TRANSLATION_NORMALIZATION_PROFILES.DEFAULT, id };
+}
+
+function markedAnnotation(content, { squareNumericNotes = false, crossReferenceNotes = false } = {}) {
+    const normalized = String(content || '').trim();
+    return EDITORIAL_MARKER.test(normalized)
+        || (squareNumericNotes && /^[\d\s，,、~～:：.．\-–—]+$/u.test(normalized))
+        || (crossReferenceNotes
+            && /^#?\s*[\p{Script=Han}A-Za-z]{1,8}\s*\d{1,3}\s*[:：]\s*\d{1,3}(?:\s*[-~～–—]\s*\d{1,3})?\s*[|｜]?$/u.test(normalized));
+}
+
+function removeMarkedParentheses(value, open, close, profile = {}) {
     let text = String(value || '');
+    const openers = new Set(Array.isArray(open) ? open : [open]);
+    const closers = new Set(Array.isArray(close) ? close : [close]);
+    let removed = 0;
     let changed = true;
     while (changed) {
         changed = false;
-        let start = -1;
+        const stack = [];
         for (let index = 0; index < text.length; index += 1) {
-            if (text[index] === open) start = index;
-            if (text[index] !== close || start < 0) continue;
+            if (openers.has(text[index])) {
+                stack.push(index);
+                continue;
+            }
+            if (!closers.has(text[index]) || stack.length === 0) continue;
+            const start = stack.pop();
             const content = text.slice(start + 1, index);
-            if (EDITORIAL_MARKER.test(content)) {
+            if (markedAnnotation(content, profile)) {
                 text = text.slice(0, start) + text.slice(index + 1);
+                removed += 1;
                 changed = true;
             }
-            start = -1;
             if (changed) break;
         }
     }
-    return text;
+    return { text, removed };
+}
+
+function removeTrailingSourceArtifacts(value) {
+    let text = String(value || '');
+    const original = text;
+    text = text.replace(/\s*[（(【[]\s*$/u, '');
+    text = text.replace(/[—─－-]{2,}\s*$/u, '');
+    return { text, removed: text !== original };
+}
+
+function removeEditorialTail(value, profile) {
+    const text = String(value || '');
+    if (profile.id !== 'TCV2010_TRAD') return { text, removed: false };
+    const marker = text.search(TCV_EDITORIAL_TAIL);
+    return marker < 0
+        ? { text, removed: false }
+        : { text: text.slice(0, marker).trimEnd(), removed: true };
+}
+
+function removeLeadingHeadingWithReference(value, profile) {
+    const text = String(value || '');
+    if (profile.leadingHeadingWithReference !== true) return { text, removed: false };
+    const heading = text.match(
+        /^([^\r\n（）()，。；：！？!?]{2,24})(?:\r?\n\s*)?(?=[（(]\s*#?\s*[\p{Script=Han}A-Za-z]{1,8}\s*\d{1,3}\s*[:：])/u
+    );
+    return heading
+        ? { text: text.slice(heading[0].length), removed: true }
+        : { text, removed: false };
 }
 
 function removeLeadingTranslationLabels(value) {
@@ -219,26 +301,51 @@ export function removeLeadingGameSuperscription(value) {
     return { text, removed };
 }
 
-export function normalizeScriptureForGame(value) {
+export function normalizeScriptureForGame(value, { version = 'CUV_TRAD' } = {}) {
+    const profile = normalizationProfile(version);
     const rawText = String(value || '').trim();
     const metadata = removeLeadingTranslationLabels(rawText);
-    const withoutChineseNotes = removeMarkedParentheses(metadata.text, '（', '）');
-    const withoutEnglishNotes = removeMarkedParentheses(withoutChineseNotes, '(', ')');
-    const superscription = removeLeadingGameSuperscription(withoutEnglishNotes);
+    const heading = removeLeadingHeadingWithReference(metadata.text, profile);
+    const editorialTail = removeEditorialTail(heading.text, profile);
+    let workingText = editorialTail.text;
+    let removedAnnotationCount = 0;
+    for (const [open, close] of [[['（', '('], ['）', ')']], [['【', '['], ['】', ']']]]) {
+        const result = removeMarkedParentheses(workingText, open, close, profile);
+        workingText = result.text;
+        removedAnnotationCount += result.removed;
+    }
+    const artifacts = removeTrailingSourceArtifacts(workingText);
+    const superscription = removeLeadingGameSuperscription(artifacts.text);
     const normalizedText = superscription.text
         .replace(/[ \t]{2,}/gu, ' ')
         .trim();
-    const nonScriptureOnly = NON_SCRIPTURE_ONLY.test(normalizedText);
+    const nonScriptureOnly = NON_SCRIPTURE_ONLY.test(normalizedText)
+        || (Boolean(normalizedText) && !VISIBLE_CHARACTER.test(normalizedText));
     const displayText = nonScriptureOnly ? '' : normalizedText;
+    // Parentheses and quotations legitimately span verse boundaries in several
+    // translations, so per-verse delimiter balance is not a source-integrity
+    // signal. Only explicit residual editorial markers are reviewed here.
+    const normalizationIssues = [];
+    if (displayText && RESIDUAL_EDITORIAL_MARKER.test(displayText)) {
+        normalizationIssues.push('RESIDUAL_EDITORIAL_TEXT');
+    }
     return {
         rawText,
         displayText,
         rawHash: sha256(rawText),
         displayHash: sha256(displayText),
         normalizationVersion: SCRIPTURE_SEGMENTATION_NORMALIZATION_VERSION,
+        translationVersion: profile.id,
         superscriptionRemoved: superscription.removed,
-        nonScriptureMetadataRemoved: metadata.removed || nonScriptureOnly,
-        nonScriptureOnly
+        removedAnnotationCount,
+        nonScriptureMetadataRemoved: metadata.removed || removedAnnotationCount > 0
+            || heading.removed || editorialTail.removed || artifacts.removed
+            || superscription.removed || nonScriptureOnly,
+        nonScriptureOnly,
+        normalizationIssues: [...new Set(normalizationIssues)],
+        sourceState: nonScriptureOnly
+            ? 'OMITTED'
+            : normalizationIssues.length ? 'REVIEW_REQUIRED' : 'CLEAN'
     };
 }
 
@@ -438,6 +545,109 @@ function candidateBoundaries(text, spans) {
         .sort((left, right) => left.offset - right.offset);
 }
 
+function isSemanticPunctuationBoundary(boundary) {
+    return boundary.kind === 'SENTENCE'
+        || boundary.kind === 'PHRASE'
+        || (boundary.kind === 'CLAUSE' && /[；;]/u.test(boundary.punctuation || ''));
+}
+
+function baseBoundaryClassification(text, boundary) {
+    if (boundary.kind === 'END') {
+        return { status: SCRIPTURE_BOUNDARY_STATES.MUST, reasonCodes: ['VERSE_END'] };
+    }
+    if (isSemanticPunctuationBoundary(boundary)) {
+        return { status: SCRIPTURE_BOUNDARY_STATES.MUST, reasonCodes: ['SEMANTIC_PUNCTUATION'] };
+    }
+
+    const leftText = text.slice(0, boundary.offset);
+    const rightText = text.slice(boundary.offset);
+    const leftVisible = visibleOptionText(leftText);
+    const rightVisible = visibleOptionText(rightText);
+    const finalWord = WORD_SEGMENTER
+        ? [...WORD_SEGMENTER.segment(leftVisible)].filter(item => item.isWordLike).at(-1)?.segment || ''
+        : '';
+
+    // These rules inspect both sides of a proposed cut. They are deliberately
+    // evaluated before length scoring, so the target can never separate a
+    // verb from its aspect marker or a possessive modifier from its noun.
+    if (/^(?:了|著|過)/u.test(rightVisible)) {
+        return { status: SCRIPTURE_BOUNDARY_STATES.FORBID, reasonCodes: ['ASPECT_PARTICLE_RIGHT'] };
+    }
+    if (/的$/u.test(leftVisible) && rightVisible) {
+        return { status: SCRIPTURE_BOUNDARY_STATES.FORBID, reasonCodes: ['GENITIVE_RELATION'] };
+    }
+    if (CAUSATIVE_GOVERNOR.test(finalWord)) {
+        return { status: SCRIPTURE_BOUNDARY_STATES.FORBID, reasonCodes: ['CAUSATIVE_RELATION'] };
+    }
+
+    if (boundary.kind === 'CLAUSE'
+        || boundary.kind === 'SEMANTIC_CLAUSE'
+        || boundary.kind === 'MEMORY_UNIT_START'
+        || boundary.kind === 'PARENTHETICAL_START'
+        || boundary.kind === 'PARENTHETICAL_END') {
+        return { status: SCRIPTURE_BOUNDARY_STATES.PREFER, reasonCodes: [boundary.kind] };
+    }
+    if (boundary.kind === 'ENUMERATION'
+        || boundary.kind === 'ENTITY_START'
+        || boundary.kind === 'ENTITY_END'
+        || boundary.kind === 'ENTITY_TERM_START'
+        || boundary.kind === 'ENTITY_TERM_END'
+        || boundary.kind === 'ROSTER_TERM') {
+        return { status: SCRIPTURE_BOUNDARY_STATES.ALLOW, reasonCodes: [boundary.kind] };
+    }
+    if (boundary.kind === 'WORD') {
+        const nextWord = WORD_SEGMENTER
+            ? [...WORD_SEGMENTER.segment(rightVisible)].find(item => item.isWordLike)?.segment || ''
+            : '';
+        // Intl occasionally leaves the final character of an unlisted
+        // transliterated name as a one-character "word" (米實利|密). Keep
+        // those rare cuts reviewable; ordinary two-sided word boundaries are
+        // deterministic lexical units and do not need an AI call.
+        if (visibleLength(nextWord) === 1 && !SAFE_SINGLE_CHARACTER_WORDS.has(nextWord)) {
+            return {
+                status: SCRIPTURE_BOUNDARY_STATES.REVIEW,
+                reasonCodes: ['SUSPICIOUS_SINGLE_CHARACTER_RIGHT']
+            };
+        }
+        return { status: SCRIPTURE_BOUNDARY_STATES.ALLOW, reasonCodes: ['WORD_BOUNDARY'] };
+    }
+    return { status: SCRIPTURE_BOUNDARY_STATES.REVIEW, reasonCodes: ['UNCLASSIFIED_BOUNDARY'] };
+}
+
+function annotateBoundaryGraph(text, candidates, decisions = {}, humanApprovedOffsets = new Set()) {
+    return candidates.map(boundary => {
+        const base = baseBoundaryClassification(text, boundary);
+        const decision = String(decisions[boundary.id] || '').toUpperCase();
+        if (humanApprovedOffsets.has(boundary.offset) && base.status !== SCRIPTURE_BOUNDARY_STATES.FORBID) {
+            return {
+                ...boundary,
+                status: SCRIPTURE_BOUNDARY_STATES.HUMAN_APPROVED,
+                reasonCodes: [...base.reasonCodes, 'APPROVED_MEMORY_BOUNDARY']
+            };
+        }
+        if (decision === 'FORBID'
+            && ![SCRIPTURE_BOUNDARY_STATES.MUST, SCRIPTURE_BOUNDARY_STATES.HUMAN_APPROVED]
+                .includes(base.status)) {
+            return {
+                ...boundary,
+                status: SCRIPTURE_BOUNDARY_STATES.FORBID,
+                reasonCodes: [...base.reasonCodes, 'REVIEW_FORBID'],
+                reviewDecision: decision
+            };
+        }
+        if (['KEEP', 'PREFER'].includes(decision)
+            && base.status !== SCRIPTURE_BOUNDARY_STATES.FORBID) {
+            return {
+                ...boundary,
+                status: SCRIPTURE_BOUNDARY_STATES.AI_APPROVED,
+                reasonCodes: [...base.reasonCodes, 'REVIEW_APPROVED'],
+                reviewDecision: decision
+            };
+        }
+        return { ...boundary, ...base };
+    });
+}
+
 function fragmentCost(fragment, boundary, targetLength, absoluteStart = 0, isolatedSpans = []) {
     const length = visibleLength(fragment);
     if (length === 0) return Number.POSITIVE_INFINITY;
@@ -467,6 +677,10 @@ function fragmentCost(fragment, boundary, targetLength, absoluteStart = 0, isola
         const hasShortPossessiveTail = /^的[\p{Script=Han}]{1,2}[\p{P}\p{S}]*$/u.test(suffix);
         if (!isExactEntity && !hasShortPossessiveTail) cost += 2_000;
     }
+    if (boundary?.status === SCRIPTURE_BOUNDARY_STATES.REVIEW) cost += 12;
+    if (boundary?.status === SCRIPTURE_BOUNDARY_STATES.PREFER) cost -= 4;
+    if ([SCRIPTURE_BOUNDARY_STATES.HUMAN_APPROVED, SCRIPTURE_BOUNDARY_STATES.AI_APPROVED]
+        .includes(boundary?.status)) cost -= 10;
     return cost - Math.min(14, (boundary?.priority || 0) / 8);
 }
 
@@ -494,6 +708,7 @@ function chooseBoundaries(
     best[0] = { cost: 0, previous: -1 };
     for (let endIndex = 1; endIndex < points.length; endIndex += 1) {
         const end = points[endIndex];
+        if (end.status === SCRIPTURE_BOUNDARY_STATES.FORBID && end.offset !== text.length) continue;
         if (decisions[end.id] === 'FORBID' && end.offset !== text.length) continue;
         // Once punctuation has already bounded a complete memory-sized unit,
         // the adjustable target must not split it merely to move closer to
@@ -592,13 +807,89 @@ export function validateHealthySegmentation({
     return { valid: errors.length === 0, errors: [...new Set(errors)], brokenTerms: [...new Set(brokenTerms)] };
 }
 
+function boundaryOffsetsForFragments(fragments = []) {
+    let offset = 0;
+    return fragments.map(fragment => {
+        offset += String(fragment || '').length;
+        return offset;
+    });
+}
+
+function includeApprovedBoundaryCandidates(candidates, offsets, textLength) {
+    const byOffset = new Map(candidates.map(boundary => [boundary.offset, boundary]));
+    for (const offset of offsets) {
+        if (offset >= textLength || byOffset.has(offset)) continue;
+        byOffset.set(offset, {
+            id: `b${offset}`,
+            offset,
+            kind: 'APPROVED_MEMORY',
+            priority: 120
+        });
+    }
+    return [...byOffset.values()].sort((left, right) => left.offset - right.offset);
+}
+
+function segmentationReadiness({ normalization, validation, fragments, selectedBoundaries }) {
+    const maximumVisibleLength = Math.max(0, ...(fragments || []).map(visibleLength));
+    const internalBoundaries = (selectedBoundaries || []).filter(
+        boundary => boundary.offset < normalization.displayText.length
+    );
+    const hasUnresolvedBoundary = internalBoundaries.some(
+        boundary => boundary.status === SCRIPTURE_BOUNDARY_STATES.REVIEW
+    );
+    const hasForbiddenBoundary = internalBoundaries.some(
+        boundary => boundary.status === SCRIPTURE_BOUNDARY_STATES.FORBID
+    );
+    const humanVerified = internalBoundaries.some(
+        boundary => boundary.status === SCRIPTURE_BOUNDARY_STATES.HUMAN_APPROVED
+    );
+    const aiVerified = internalBoundaries.some(
+        boundary => boundary.status === SCRIPTURE_BOUNDARY_STATES.AI_APPROVED
+    );
+    const integrityState = validation.valid ? 'VALID' : 'INVALID';
+    const boundaryState = !validation.valid || hasForbiddenBoundary
+        ? 'REJECTED'
+        : hasUnresolvedBoundary
+            ? 'REVIEW_REQUIRED'
+            : humanVerified
+                ? 'HUMAN_VERIFIED'
+                : aiVerified
+                    ? 'AI_VERIFIED'
+                    : 'RULE_VERIFIED';
+    const lengthState = maximumVisibleLength <= 8
+        ? 'VOICE_READY'
+        : maximumVisibleLength <= SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH
+            ? 'VISUAL_READY'
+            : 'LONG_EXCEPTION';
+    const sourceClean = normalization.sourceState === 'CLEAN';
+    const boundaryVerified = !['REJECTED', 'REVIEW_REQUIRED'].includes(boundaryState);
+    const memoryReady = validation.valid && sourceClean && boundaryVerified
+        && maximumVisibleLength <= SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH;
+    const voiceReady = memoryReady && maximumVisibleLength <= 8;
+    const confidence = !validation.valid || hasForbiddenBoundary || !sourceClean
+        ? 'LOW'
+        : hasUnresolvedBoundary
+            ? 'MEDIUM'
+            : 'HIGH';
+    return {
+        integrityState,
+        boundaryState,
+        lengthState,
+        maximumVisibleLength,
+        memoryReady,
+        voiceReady,
+        confidence
+    };
+}
+
 export function segmentScriptureVerse(sourceText, {
     protectedTerms = protectedCoreTerms(),
     boundaryDecisions = {},
-    targetLength = SCRIPTURE_SEGMENTATION_TARGET_LENGTH
+    targetLength = SCRIPTURE_SEGMENTATION_TARGET_LENGTH,
+    version = 'CUV_TRAD'
 } = {}) {
     const preferredLength = configuredTargetLength(targetLength);
-    const normalization = normalizeScriptureForGame(sourceText);
+    const normalization = normalizeScriptureForGame(sourceText, { version });
     const text = normalization.displayText;
     if (!text) {
         const omittedIssue = normalization.nonScriptureOnly
@@ -611,7 +902,12 @@ export function segmentScriptureVerse(sourceText, {
             healthState: 'VALID', confidence: 'HIGH', issues: [omittedIssue],
             targetLength: preferredLength,
             memoryProfile: SCRIPTURE_SEGMENTATION_MEMORY_PROFILE_VERSION,
-            voiceReady: true,
+            integrityState: 'VALID',
+            boundaryState: 'NOT_APPLICABLE',
+            lengthState: 'EMPTY',
+            maximumVisibleLength: 0,
+            memoryReady: false,
+            voiceReady: false,
             ruleVersion: segmentationRuleVersion(preferredLength),
             lexiconVersion: SCRIPTURE_SEGMENTATION_LEXICON_VERSION
         };
@@ -620,20 +916,19 @@ export function segmentScriptureVerse(sourceText, {
         ...findProtectedSpans(text, protectedTerms),
         ...intlProtectedSpans(text)
     ];
-    const candidates = candidateBoundaries(text, spans);
-    const approved = approvedMemoryByDisplayText.get(text);
+    const approvedKey = `${normalization.translationVersion}\u0000${text}`;
+    const approved = approvedMemoryByDisplayText.get(approvedKey);
     if (approved) {
-        let approvedOffset = 0;
-        const selectedBoundaries = approved.fragments.map(fragment => {
-            approvedOffset += fragment.length;
-            return {
-                id: 'approved-' + approvedOffset,
-                offset: approvedOffset,
-                kind: approvedOffset === text.length ? 'END' : 'APPROVED_MEMORY',
-                priority: 120
-            };
-        });
-        const boundaryOffsets = selectedBoundaries.map(boundary => boundary.offset);
+        const boundaryOffsets = boundaryOffsetsForFragments(approved.fragments);
+        const humanApprovedOffsets = new Set(boundaryOffsets.slice(0, -1));
+        const candidates = annotateBoundaryGraph(
+            text,
+            includeApprovedBoundaryCandidates(candidateBoundaries(text, spans), boundaryOffsets, text.length),
+            boundaryDecisions,
+            humanApprovedOffsets
+        );
+        const candidatesByOffset = new Map(candidates.map(boundary => [boundary.offset, boundary]));
+        const selectedBoundaries = boundaryOffsets.map(offset => candidatesByOffset.get(offset));
         const validation = validateHealthySegmentation({
             text,
             fragments: approved.fragments,
@@ -648,27 +943,45 @@ export function segmentScriptureVerse(sourceText, {
         const withinMemoryLimit = approved.fragments.every(
             fragment => visibleLength(fragment) <= SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH
         );
-        const valid = validation.valid && withinMemoryLimit;
+        const forbiddenApprovedBoundary = selectedBoundaries.slice(0, -1).some(
+            boundary => boundary.status === SCRIPTURE_BOUNDARY_STATES.FORBID
+        );
+        const valid = validation.valid && withinMemoryLimit && !forbiddenApprovedBoundary;
+        const readiness = segmentationReadiness({
+            normalization,
+            validation,
+            fragments: approved.fragments,
+            selectedBoundaries
+        });
         return {
             ...normalization,
             fragments: [...approved.fragments],
             boundaryOffsets,
             candidateBoundaries: candidates,
+            boundaryGraph: candidates,
             selectedBoundaries,
             protectedSpans: spans,
             healthState: valid ? 'VALID' : 'NEEDS_REPAIR',
-            confidence: valid ? 'HIGH' : 'LOW',
+            ...readiness,
             issues: valid
                 ? ['APPROVED_MEMORY_SEGMENTATION']
-                : [...validation.errors, ...(withinMemoryLimit ? [] : ['MEMORY_FRAGMENT_TOO_LONG'])],
+                : [...normalization.normalizationIssues, ...validation.errors,
+                    ...(withinMemoryLimit ? [] : ['MEMORY_FRAGMENT_TOO_LONG']),
+                    ...(forbiddenApprovedBoundary ? ['APPROVED_BOUNDARY_FORBIDDEN'] : [])],
             targetLength: preferredLength,
             memoryProfile: SCRIPTURE_SEGMENTATION_MEMORY_PROFILE_VERSION,
-            voiceReady: valid,
             approvedReference: approved.reference,
+            approvedVersion: approved.version,
+            approvedBoundaryOffsets: [...humanApprovedOffsets],
             ruleVersion: segmentationRuleVersion(preferredLength),
             lexiconVersion: SCRIPTURE_SEGMENTATION_LEXICON_VERSION
         };
     }
+    const candidates = annotateBoundaryGraph(
+        text,
+        candidateBoundaries(text, spans),
+        boundaryDecisions
+    );
     const selected = chooseBoundaries(
         text,
         candidates,
@@ -696,7 +1009,14 @@ export function segmentScriptureVerse(sourceText, {
     });
     const longThreshold = SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH;
     const longFragments = fragments.filter(fragment => visibleLength(fragment) > longThreshold);
-    const issues = [...validation.errors];
+    const readiness = segmentationReadiness({
+        normalization,
+        validation,
+        fragments,
+        selectedBoundaries: selected
+    });
+    const issues = [...normalization.normalizationIssues, ...validation.errors];
+    if (readiness.boundaryState === 'REVIEW_REQUIRED') issues.push('BOUNDARY_REVIEW_REQUIRED');
     if (longFragments.length) issues.push('LONG_FRAGMENT_EXCEPTION');
     const healthState = !validation.valid ? 'NEEDS_REPAIR' : longFragments.length ? 'VALID_LONG' : 'VALID';
     return {
@@ -704,14 +1024,14 @@ export function segmentScriptureVerse(sourceText, {
         fragments,
         boundaryOffsets,
         candidateBoundaries: candidates,
+        boundaryGraph: candidates,
         selectedBoundaries: selected,
         protectedSpans: spans,
         healthState,
-        confidence: healthState === 'VALID' ? 'HIGH' : healthState === 'VALID_LONG' ? 'MEDIUM' : 'LOW',
+        ...readiness,
         issues: [...new Set(issues)],
         targetLength: preferredLength,
         memoryProfile: SCRIPTURE_SEGMENTATION_MEMORY_PROFILE_VERSION,
-        voiceReady: healthState === 'VALID',
         ruleVersion: segmentationRuleVersion(preferredLength),
         lexiconVersion: SCRIPTURE_SEGMENTATION_LEXICON_VERSION
     };

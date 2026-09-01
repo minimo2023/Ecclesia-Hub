@@ -1,5 +1,6 @@
 {
   "profileVersion": "memory-segments-v1-t6-8-m10",
+  "defaultVersion": "CUV_TRAD",
   "maximumVisibleLength": 10,
   "entries": [
     {

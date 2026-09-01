@@ -19,6 +19,8 @@ function promptFor(entry, candidates, protectedTerms) {
         id: boundary.id,
         offset: boundary.offset,
         kind: boundary.kind,
+        status: boundary.status,
+        reasonCodes: boundary.reasonCodes,
         left: entry.displayText.slice(Math.max(0, boundary.offset - 6), boundary.offset),
         right: entry.displayText.slice(boundary.offset, boundary.offset + 6)
     }));
@@ -141,23 +143,33 @@ async function claimNext() {
 
 async function reviewEntry(entry) {
     const protectedTerms = await activeProtectedTerms();
-    const machine = segmentScriptureVerse(entry.rawText, { protectedTerms });
-    const candidateIds = new Set(machine.candidateBoundaries.map(boundary => boundary.id));
-    const prompt = promptFor(entry, machine.candidateBoundaries, protectedTerms);
+    const machine = segmentScriptureVerse(entry.rawText, { protectedTerms, version: entry.version });
+    const unresolvedCandidates = machine.candidateBoundaries.filter(
+        boundary => boundary.status === 'REVIEW'
+    );
+    if (unresolvedCandidates.length === 0) throw new Error('NO_REVIEWABLE_BOUNDARIES');
+    const candidateIds = new Set(unresolvedCandidates.map(boundary => boundary.id));
+    const prompt = promptFor(entry, unresolvedCandidates, protectedTerms);
     const result = await freeBoundaryReview(prompt, entry.entryKey);
     const decisions = normalizeAiOutput(result.output, candidateIds);
-    const reviewed = segmentScriptureVerse(entry.rawText, { protectedTerms, boundaryDecisions: decisions });
-    if (reviewed.healthState !== 'VALID' || reviewed.voiceReady !== true) {
-        throw new Error('AI_BOUNDARY_RESULT_NOT_MEMORY_READY');
+    const reviewed = segmentScriptureVerse(entry.rawText, {
+        protectedTerms,
+        boundaryDecisions: decisions,
+        version: entry.version
+    });
+    if (reviewed.integrityState !== 'VALID' || reviewed.boundaryState === 'REVIEW_REQUIRED') {
+        throw new Error('AI_BOUNDARY_RESULT_UNRESOLVED');
     }
     if (reviewed.displayText !== entry.displayText) throw new Error('AI_CHANGED_SCRIPTURE_TEXT');
     await persistReviewedSegmentation({ sourceEntry: entry, segmentation: reviewed, provider: result.provider, modelId: result.modelId });
+    const queueStatus = reviewed.memoryReady === true ? 'COMPLETED' : 'SKIPPED';
     await dbOps.gamesDb.run(`
         UPDATE scripture_segmentation_ai_queue
-        SET status = 'COMPLETED', provider = $1, model_id = $2,
+        SET status = $1, provider = $2, model_id = $3,
+            failure_code = CASE WHEN $1 = 'SKIPPED' THEN 'LEXICON_OR_LENGTH_REVIEW_REQUIRED' ELSE NULL END,
             completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE entry_key = $3
-    `, [result.provider, result.modelId, entry.entryKey]);
+        WHERE entry_key = $4
+    `, [queueStatus, result.provider, result.modelId, entry.entryKey]);
 }
 
 export async function processSegmentationBoundaryReviewQueue({ limit = 20 } = {}) {

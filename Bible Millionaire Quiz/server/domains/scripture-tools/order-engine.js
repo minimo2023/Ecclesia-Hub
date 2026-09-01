@@ -114,7 +114,7 @@ export function splitVersesForOrder(verses = [], options = {}) {
     return {
         fragments,
         perVerse,
-        lowConfidenceVerses: perVerse.filter(verse => verse.confidence === 'LOW')
+        lowConfidenceVerses: perVerse.filter(verse => verse.memoryReady !== true)
     };
 }
 

@@ -26,6 +26,14 @@ test('marked translation notes are removed while parenthetical Scripture remains
         normalizeScriptureForGame('生命已經顯現出來（我們也看見過，現在又作見證）。').displayText,
         '生命已經顯現出來（我們也看見過，現在又作見證）。'
     );
+    assert.equal(
+        normalizeScriptureForGame('三十軍官（「軍官」或譯：「三十（勇士）」）的首領。', { version: 'CNV_TRAD' }).displayText,
+        '三十軍官的首領。'
+    );
+    assert.equal(
+        normalizeScriptureForGame('作居住的城市（按照《馬索拉文本》，現參照《七十士譯本》翻譯。)', { version: 'CNV_TRAD' }).displayText,
+        '作居住的城市'
+    );
 });
 
 test('leading Psalm superscriptions are excluded only from game text', () => {
@@ -42,8 +50,10 @@ test('an editorial-note-only verse is a valid omitted game entry instead of an e
     assert.equal(result.displayText, '');
     assert.equal(result.healthState, 'VALID');
     assert.equal(result.confidence, 'HIGH');
+    assert.equal(result.memoryReady, false);
+    assert.equal(result.voiceReady, false);
     assert.deepEqual(result.fragments, []);
-    assert.equal(result.ruleVersion, 'healthy-rule-v13-semantic-punctuation-t8-m10');
+    assert.equal(result.ruleVersion, 'healthy-rule-v14-boundary-graph-t8-m10');
     assert.equal(result.lexiconVersion, 'protected-terms-v4');
     assert.ok(result.issues.includes('EDITORIAL_NOTE_ONLY_VERSE'));
     assert.equal(validateHealthySegmentation({ text: '', fragments: [], boundaryOffsets: [] }).valid, true);
@@ -74,6 +84,14 @@ test('translation labels are excluded before Scripture segmentation', () => {
     const normalized = normalizeScriptureForGame('【和合本 CUV】\n太初有道，道與神同在。');
     assert.equal(normalized.displayText, '太初有道，道與神同在。');
     assert.equal(normalized.nonScriptureMetadataRemoved, true);
+    assert.equal(
+        normalizeScriptureForGame('【呂振中譯本 LCC】\n起初上帝創造天地。', { version: 'LCC_TRAD' }).displayText,
+        '起初上帝創造天地。'
+    );
+    assert.equal(
+        normalizeScriptureForGame('【中文新譯本 CNV】\n起初　神創造天地。', { version: 'CNV_TRAD' }).displayText,
+        '起初　神創造天地。'
+    );
 });
 
 test('non-Scripture footnote placeholders are omitted from game text', () => {
@@ -182,11 +200,14 @@ test('approved memory passages reproduce every reviewed fragment exactly', () =>
     assert.equal(SCRIPTURE_SEGMENTATION_MEMORY_PROFILE_VERSION, 'memory-segments-v1-t6-8-m10');
     assert.equal(SCRIPTURE_SEGMENTATION_MEMORY_MAX_LENGTH, 10);
     for (const example of approved) {
-        const result = segmentScriptureVerse(example.displayText);
+        const result = segmentScriptureVerse(example.displayText, { version: example.version });
         assert.deepEqual(result.fragments, example.fragments, example.reference);
         assert.equal(result.fragments.join(''), example.displayText, example.reference);
         assert.equal(result.healthState, 'VALID', example.reference);
-        assert.equal(result.voiceReady, true, example.reference);
+        assert.equal(result.memoryReady, true, example.reference);
+        assert.equal(result.voiceReady, result.maximumVisibleLength <= 8, example.reference);
+        assert.equal(result.boundaryState, 'HUMAN_VERIFIED', example.reference);
+        assert.equal(result.approvedVersion, example.version, example.reference);
         assert.equal(result.approvedReference, example.reference);
         assert.ok(result.issues.includes('APPROVED_MEMORY_SEGMENTATION'));
         assert.ok(result.fragments.every(fragment => (
@@ -211,8 +232,10 @@ test('target length is adjustable but never creates arbitrary word cuts', () => 
     const source = '耶和華是我的牧者我必不致缺乏';
     const result = segmentScriptureVerse(source, { targetLength: 6 });
     assert.deepEqual(result.fragments, ['耶和華', '是我的牧者', '我必不致缺乏']);
-    assert.equal(result.ruleVersion, 'healthy-rule-v13-semantic-punctuation-t6-m10');
+    assert.equal(result.ruleVersion, 'healthy-rule-v14-boundary-graph-t6-m10');
     assert.equal(result.healthState, 'VALID');
+    assert.equal(result.boundaryState, 'RULE_VERIFIED');
+    assert.equal(result.confidence, 'HIGH');
 });
 
 test('single-character function words unlock long clauses without splitting unknown names', () => {
@@ -341,7 +364,101 @@ test('length is a warning and an unsafe phrase may remain long', () => {
     });
     assert.equal(result.fragments.join(''), source);
     assert.equal(result.healthState, 'VALID_LONG');
+    assert.equal(result.lengthState, 'LONG_EXCEPTION');
+    assert.equal(result.memoryReady, false);
     assert.deepEqual(result.fragments, [source]);
+});
+
+test('translation profiles remove only their own source artifacts', () => {
+    const numericNote = '上主是我的牧者。【12】';
+    assert.equal(
+        normalizeScriptureForGame(numericNote, { version: 'LCC_TRAD' }).displayText,
+        '上主是我的牧者。'
+    );
+    assert.equal(
+        normalizeScriptureForGame(numericNote, { version: 'CUV_TRAD' }).displayText,
+        numericNote
+    );
+    const divider = normalizeScriptureForGame('你們要喜樂。』———', { version: 'LCC_TRAD' });
+    assert.equal(divider.displayText, '你們要喜樂。』');
+    assert.equal(divider.sourceState, 'CLEAN');
+    const unmatchedTail = normalizeScriptureForGame('你們要喜樂。\n （', { version: 'TCV2010_TRAD' });
+    assert.equal(unmatchedTail.displayText, '你們要喜樂。');
+    assert.equal(unmatchedTail.sourceState, 'CLEAN');
+    assert.equal(
+        normalizeScriptureForGame('你們要喜樂。（', { version: 'TCV2010_TRAD' }).displayText,
+        '你們要喜樂。'
+    );
+    const alternateEnding = '門徒出去傳福音。〕\r\n\r\ns :另有些古卷有下列結語:\r\n〔9 那些婦女去見彼得。〕';
+    const normalizedEnding = normalizeScriptureForGame(alternateEnding, { version: 'TCV2010_TRAD' });
+    assert.equal(normalizedEnding.displayText, '門徒出去傳福音。〕');
+    assert.equal(normalizedEnding.nonScriptureMetadataRemoved, true);
+    const segmentedEnding = segmentScriptureVerse(alternateEnding, { version: 'TCV2010_TRAD' });
+    assert.equal(segmentedEnding.fragments.join(''), segmentedEnding.displayText);
+    assert.notEqual(segmentedEnding.healthState, 'NEEDS_REPAIR');
+    assert.equal(
+        normalizeScriptureForGame('所羅門的祈禱\n（#王上 8:22-53|） 接著，所羅門舉起雙手禱告。', {
+            version: 'TCV2010_TRAD'
+        }).displayText,
+        '接著，所羅門舉起雙手禱告。'
+    );
+    assert.equal(
+        normalizeScriptureForGame('擊敗亞蘭人（撒下8:5~12）大馬士革的亞蘭人來幫助他。', {
+            version: 'CNV_TRAD'
+        }).displayText,
+        '大馬士革的亞蘭人來幫助他。'
+    );
+});
+
+test('boundary graph forbids aspect-particle and genitive cuts on both sides', () => {
+    const aspect = segmentScriptureVerse('主人已經預備了豐盛的筵席。');
+    const beforeAspect = aspect.displayText.indexOf('了');
+    assert.equal(
+        aspect.candidateBoundaries.find(boundary => boundary.offset === beforeAspect)?.status,
+        'FORBID'
+    );
+    assert.ok(aspect.fragments.every(fragment => !/預備$/u.test(fragment)));
+
+    const genitive = segmentScriptureVerse('這些是以實瑪利的兒子和他們的名字。');
+    const afterGenitive = genitive.displayText.indexOf('的兒子') + 1;
+    assert.equal(
+        genitive.candidateBoundaries.find(boundary => boundary.offset === afterGenitive)?.status,
+        'FORBID'
+    );
+    assert.ok(genitive.fragments.every(fragment => !/的$/u.test(fragment)));
+});
+
+test('suspicious one-character name tails are reviewable instead of silently high confidence', () => {
+    const source = '米書蘭是米實利密的兒子；';
+    const machine = segmentScriptureVerse(source);
+    assert.equal(machine.boundaryState, 'REVIEW_REQUIRED');
+    assert.equal(machine.confidence, 'MEDIUM');
+    assert.equal(machine.memoryReady, false);
+    const decisions = Object.fromEntries(machine.candidateBoundaries
+        .filter(boundary => boundary.status === 'REVIEW')
+        .map(boundary => [boundary.id, 'FORBID']));
+    const reviewed = segmentScriptureVerse(source, { boundaryDecisions: decisions });
+    assert.equal(reviewed.boundaryState, 'RULE_VERIFIED');
+    assert.equal(reviewed.confidence, 'HIGH');
+    assert.equal(reviewed.memoryReady, false);
+    assert.equal(reviewed.lengthState, 'LONG_EXCEPTION');
+    assert.ok(reviewed.fragments.every(fragment => !/米實利$/u.test(fragment)));
+});
+
+test('negated causative verbs keep their object on the same memory side', () => {
+    const result = segmentScriptureVerse('她晝夜看守屍身，不讓田野的走獸前來糟踐。');
+    assert.ok(result.fragments.every(fragment => !/不讓$/u.test(fragment.replace(/[\p{P}\p{S}\s]/gu, ''))));
+    assert.equal(result.fragments.join(''), result.displayText);
+});
+
+test('human-approved fragment boundaries are isolated by translation version', () => {
+    const source = '他使我的靈魂甦醒，為自己的名引導我走義路。';
+    const cuv = segmentScriptureVerse(source, { version: 'CUV_TRAD' });
+    const cnv = segmentScriptureVerse(source, { version: 'CNV_TRAD' });
+    assert.equal(cuv.approvedReference, 'Psalms 23:3');
+    assert.equal(cuv.approvedVersion, 'CUV_TRAD');
+    assert.equal(cnv.approvedReference, undefined);
+    assert.equal(cnv.translationVersion, 'CNV_TRAD');
 });
 
 test('health validation rejects protected-term internal offsets', () => {

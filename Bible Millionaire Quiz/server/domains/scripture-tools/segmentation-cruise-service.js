@@ -78,8 +78,9 @@ export async function activeProtectedTerms() {
 }
 
 function databaseEntry(verseRow, segmentation, runId) {
+    const version = String(verseRow.version || segmentation.translationVersion || CRUISE_VERSION);
     const entryKey = entryKeyFor({
-        version: CRUISE_VERSION,
+        version,
         book: verseRow.book,
         chapter: Number(verseRow.chapter),
         verse: Number(verseRow.verse),
@@ -90,7 +91,7 @@ function databaseEntry(verseRow, segmentation, runId) {
     return {
         entryKey,
         runId,
-        version: CRUISE_VERSION,
+        version,
         book: verseRow.book,
         chapter: Number(verseRow.chapter),
         verse: Number(verseRow.verse),
@@ -99,7 +100,10 @@ function databaseEntry(verseRow, segmentation, runId) {
 }
 
 async function storeEntry(tx, entry, { activate }) {
-    const canActivate = activate && ['VALID', 'VALID_LONG'].includes(entry.healthState);
+    const canActivate = activate
+        && entry.healthState === 'VALID'
+        && entry.confidence === 'HIGH'
+        && entry.memoryReady === true;
     if (canActivate) {
         await tx.run(`
             UPDATE scripture_segmentation_entries
@@ -140,7 +144,9 @@ async function storeEntry(tx, entry, { activate }) {
         JSON.stringify(entry.fragments), entry.healthState, entry.confidence,
         JSON.stringify(entry.issues), canActivate]);
 
-    if (activate && ['VALID_LONG', 'NEEDS_REPAIR'].includes(entry.healthState)) {
+    if (activate
+        && entry.sourceState === 'CLEAN'
+        && entry.boundaryState === 'REVIEW_REQUIRED') {
         await tx.run(`
             INSERT INTO scripture_segmentation_ai_queue (entry_key)
             VALUES ($1) ON CONFLICT (entry_key) DO NOTHING
@@ -163,7 +169,7 @@ async function storeLegacyCompatibleCache(tx, entry) {
             updated_at = CURRENT_TIMESTAMP
     `, [entry.entryKey, entry.version, entry.book, entry.chapter, entry.verse,
         entry.displayHash, entry.ruleVersion, JSON.stringify(entry.fragments),
-        entry.confidence === 'HIGH' ? 'HIGH' : 'LOW',
+        entry.memoryReady === true ? 'HIGH' : 'LOW',
         JSON.stringify({
             healthState: entry.healthState,
             normalizationVersion: entry.normalizationVersion,
@@ -186,7 +192,11 @@ async function loadBatch(offset, limit) {
 async function processBatch(run, terms) {
     const rows = await loadBatch(Number(run.processedVerses), Number(run.batchSize));
     if (rows.length === 0) return { done: true };
-    const entries = rows.map(row => databaseEntry(row, segmentScriptureVerse(row.text, { protectedTerms: terms }), run.id));
+    const entries = rows.map(row => databaseEntry(
+        { ...row, version: CRUISE_VERSION },
+        segmentScriptureVerse(row.text, { protectedTerms: terms, version: CRUISE_VERSION }),
+        run.id
+    ));
     const stats = entries.reduce((result, entry) => {
         if (entry.healthState === 'VALID') result.valid += 1;
         else if (entry.healthState === 'VALID_LONG') result.validLong += 1;
@@ -388,7 +398,7 @@ export async function segmentationCruiseOverview() {
 export async function segmentationCruiseExceptions({ runId = null, limit = 100, offset = 0 } = {}) {
     const size = Math.min(500, Math.max(1, Number(limit) || 100));
     const skip = Math.max(0, Number(offset) || 0);
-    const clauses = ["health_state IN ('VALID_LONG','NEEDS_REPAIR','INVALIDATED')"];
+    const clauses = ["(health_state IN ('VALID_LONG','NEEDS_REPAIR','INVALIDATED') OR confidence <> 'HIGH')"];
     const params = [];
     if (runId) {
         params.push(runId);
@@ -415,12 +425,12 @@ export async function resolveVerseSegmentation({ version = CRUISE_VERSION, book,
         throw new SegmentationCruiseError('SEGMENTATION_VERSION_UNSUPPORTED', '健康切片第一版只支援和合本', 422);
     }
     const terms = await activeProtectedTerms();
-    const machine = segmentScriptureVerse(text, { protectedTerms: terms });
+    const machine = segmentScriptureVerse(text, { protectedTerms: terms, version });
     const row = await dbOps.gamesDb.get(`
         SELECT * FROM scripture_segmentation_entries
         WHERE version = $1 AND book = $2 AND chapter = $3 AND verse = $4
           AND display_hash = $5 AND rule_version = $6 AND lexicon_version = $7
-          AND active = TRUE AND health_state IN ('VALID','VALID_LONG')
+          AND active = TRUE AND health_state = 'VALID' AND confidence = 'HIGH'
         LIMIT 1
     `, [version, book, chapter, verse, machine.displayHash,
         machine.ruleVersion, SCRIPTURE_SEGMENTATION_LEXICON_VERSION]);
@@ -444,8 +454,8 @@ export async function resolveVerseSegmentation({ version = CRUISE_VERSION, book,
             };
         }
     }
-    const entry = databaseEntry({ book, chapter, verse }, machine, null);
-    if (['VALID', 'VALID_LONG'].includes(entry.healthState)) {
+    const entry = databaseEntry({ version, book, chapter, verse }, machine, null);
+    if (entry.memoryReady === true) {
         await dbOps.gamesDb.transaction(async tx => {
             await storeEntry(tx, entry, { activate: true });
             await storeLegacyCompatibleCache(tx, entry);
@@ -474,7 +484,7 @@ export async function resolvePassageSegmentation({ version = CRUISE_VERSION, boo
         perVerse,
         lowConfidenceVerses: perVerse
             .map((item, index) => ({ item, verse: Number(verses[index]?.verse) }))
-            .filter(({ item }) => item.healthState !== 'VALID')
+            .filter(({ item }) => item.memoryReady !== true)
             .map(({ verse }) => verse),
         segmentationEntries: perVerse.map((item, index) => ({
             verse: Number(verses[index]?.verse),
@@ -494,11 +504,12 @@ export async function waitForSegmentationCruise(runId) {
 export async function persistReviewedSegmentation({ sourceEntry, segmentation, provider, modelId }) {
     const reviewed = {
         ...segmentation,
-        ruleVersion: `${segmentation.ruleVersion || SCRIPTURE_SEGMENTATION_RULE_VERSION}+semantic-boundary-v1`,
+        ruleVersion: segmentation.ruleVersion || SCRIPTURE_SEGMENTATION_RULE_VERSION,
         lexiconVersion: SCRIPTURE_SEGMENTATION_LEXICON_VERSION,
         issues: [...new Set([...(segmentation.issues || []), 'AI_BOUNDARY_REVIEWED'])]
     };
     const entry = databaseEntry({
+        version: sourceEntry.version,
         book: sourceEntry.book,
         chapter: Number(sourceEntry.chapter),
         verse: Number(sourceEntry.verse)
